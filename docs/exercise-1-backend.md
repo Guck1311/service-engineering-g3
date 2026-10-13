@@ -329,7 +329,7 @@ await this.dataSource.transaction(async (manager) => {
 
 ## 6. REST API and OpenAPI Documentation
 
-All endpoints are under the base path `/api/v1`. Every request needs an `X-User-Id` header (section 9).
+All endpoints are under the base path `/api/v1`. Every request needs an `X-User-Id` header (section 9), except the public `GET /users`.
 
 ### Endpoints
 
@@ -363,7 +363,8 @@ All endpoints are under the base path `/api/v1`. Every request needs an `X-User-
 | POST   | `/music-items/{id}/comments`         | any       | 201       | Comment as the current user          |
 | GET    | `/music-items/{id}/ratings`          | any       | 200       | Average, count and all ratings       |
 | PUT    | `/music-items/{id}/ratings/{userId}` | any (own) | 201 / 200 | Create (201) or replace (200) own rating |
-| GET    | `/users`, `/users/{id}`              | any       | 200       | Seeded users (read-only)             |
+| GET    | `/users`                             | public    | 200       | Seeded users, no header needed       |
+| GET    | `/users/{id}`                        | any       | 200       | One seeded user                      |
 
 ### Controller implementation
 
@@ -567,6 +568,8 @@ A global guard (`AuthGuard`, registered as `APP_GUARD`) handles every request:
 1. It reads `X-User-Id` and loads the user. A missing or unknown id returns **401**.
 2. It attaches the user to the request, so controllers can inject it with `@CurrentUser()`.
 3. It checks the roles declared with `@Roles(...)`. A caller without the required role gets **403**.
+
+Endpoints marked with `@Public()` skip these steps. Only `GET /users` is public: a client needs the list of users before it can pick one.
 
 ```ts
 const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [

@@ -25,6 +25,15 @@ export const ROLES_KEY = 'roles';
  */
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
 
+/** Metadata key under which {@link Public} marks an endpoint. */
+export const IS_PUBLIC_KEY = 'isPublic';
+
+/**
+ * Lets an endpoint be called without the `X-User-Id` header, e.g. the user
+ * list that a client shows before a user is selected.
+ */
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
 /**
  * Parameter decorator that injects the caller, i.e. the user that
  * {@link AuthGuard} resolved from the `X-User-Id` header.

@@ -34,6 +34,11 @@ describe('Music Collection Manager API (e2e)', () => {
     return api().get('/api/v1/music-items').expect(401);
   });
 
+  it('lists users without X-User-Id (public endpoint)', async () => {
+    const res = await api().get('/api/v1/users').expect(200);
+    expect(res.body).toHaveLength(3);
+  });
+
   it('lists the catalogue with pagination and filters', async () => {
     const res = await api()
       .get('/api/v1/music-items?type=ALBUM')

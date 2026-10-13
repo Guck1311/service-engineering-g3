@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import {Reflector} from '@nestjs/core';
 import {UsersService} from '../users/users.service.js';
-import {ROLES_KEY} from './auth.decorators.js';
+import {IS_PUBLIC_KEY, ROLES_KEY} from './auth.decorators.js';
 import {Role} from './role.enum.js';
 
 /** Request header that carries the id of the calling user. */
@@ -27,7 +27,8 @@ export class AuthGuard implements CanActivate {
 
   /**
    * Resolves the caller, stores it as `request.user` and checks the roles
-   * declared with {@link Roles}.
+   * declared with {@link Roles}. Endpoints marked with {@link Public} are
+   * let through without a caller.
    *
    * @param context - Execution context of the current request.
    * @returns `true` if the request may proceed.
@@ -35,6 +36,14 @@ export class AuthGuard implements CanActivate {
    * @throws ForbiddenException if the caller lacks a required role.
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean | undefined>(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest();
     const header = request.headers[USER_ID_HEADER.toLowerCase()];
     const userId = Number(header);

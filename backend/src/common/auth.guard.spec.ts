@@ -6,6 +6,7 @@ import {
 import {Reflector} from '@nestjs/core';
 import type {User} from '../users/user.entity.js';
 import type {UsersService} from '../users/users.service.js';
+import {IS_PUBLIC_KEY, ROLES_KEY} from './auth.decorators.js';
 import {AuthGuard} from './auth.guard.js';
 import {Role} from './role.enum.js';
 
@@ -57,7 +58,9 @@ describe('AuthGuard', () => {
   });
 
   it('enforces @Roles using the stored role', async () => {
-    vi.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
+    vi.spyOn(reflector, 'getAllAndOverride').mockImplementation(key =>
+      key === ROLES_KEY ? [Role.ADMIN] : undefined,
+    );
 
     await expect(
       guard.canActivate(contextFor({'x-user-id': '2'}).context),
@@ -65,5 +68,12 @@ describe('AuthGuard', () => {
     await expect(
       guard.canActivate(contextFor({'x-user-id': '1'}).context),
     ).resolves.toBe(true);
+  });
+
+  it('lets @Public endpoints through without a header', async () => {
+    vi.spyOn(reflector, 'getAllAndOverride').mockImplementation(
+      key => key === IS_PUBLIC_KEY,
+    );
+    await expect(guard.canActivate(contextFor({}).context)).resolves.toBe(true);
   });
 });

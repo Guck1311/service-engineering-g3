@@ -66,7 +66,7 @@ Rules:
 
 ## Identifying the Caller
 
-There is no login. Every request sends `X-User-Id` with the id of a seeded user; the role is read from that user's record (not sent by the client).
+There is no login. Every request sends `X-User-Id` with the id of a seeded user; the role is read from that user's record (not sent by the client). The only exception is `GET /users`, which is public so a client can show a user selection first.
 
 - Missing or unknown `X-User-Id` → `401`
 - Valid user without the required role, or acting on another user's collection → `403`
@@ -108,7 +108,7 @@ All paths are relative to `/api/v1`.
 
 | Method | Path          | Role | Success |
 | ------ | ------------- | ---- | ------- |
-| GET    | `/users`      | any  | 200     |
+| GET    | `/users`      | public | 200     |
 | GET    | `/users/{id}` | any  | 200     |
 
 ## Conventions
