@@ -1,14 +1,27 @@
-import './assets/main.css'
+import 'bootstrap-icons/font/bootstrap-icons.css';
+import './styles/main.scss';
 
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
+import {createPinia} from 'pinia';
+import {createApp} from 'vue';
 
-import App from './App.vue'
-import router from './router'
+import {setUserIdProvider} from './api/http';
+import App from './App.vue';
+import router from './router';
+import {useNotificationsStore} from './stores/notifications';
+import {useSessionStore} from './stores/session';
 
-const app = createApp(App)
+const app = createApp(App);
+app.use(createPinia());
+app.use(router);
 
-app.use(createPinia())
-app.use(router)
+// The HTTP client sends the selected user as X-User-Id.
+const session = useSessionStore();
+setUserIdProvider(() => session.currentUserId);
 
-app.mount('#app')
+// Last line of defence: errors that no component handled become a toast.
+app.config.errorHandler = (error, _instance, info) => {
+  console.error(`Unhandled error (${info}):`, error);
+  useNotificationsStore().error(error);
+};
+
+app.mount('#app');

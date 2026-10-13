@@ -1,0 +1,25 @@
+// Global styles: our variable overrides, then the full Bootstrap build.
+@import 'variables';
+@import 'bootstrap/scss/bootstrap';
+
+// App-wide additions on top of Bootstrap.
+body {
+  background-color: $gray-100;
+  min-height: 100vh;
+}
+
+.card {
+  box-shadow: $card-box-shadow;
+}
+
+// Cards in a grid lift slightly on hover.
+.card-hover {
+  transition:
+    transform 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $box-shadow;
+  }
+}
