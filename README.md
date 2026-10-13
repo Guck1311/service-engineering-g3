@@ -2,8 +2,6 @@
 
 KV Service Engineering WS 2026/2027, Exercise 1 (Group 3). REST backend built with NestJS.
 
-> **Status:** planned design, not implemented yet. `backend/src` still contains the NestJS starter.
-
 ## Requirements (from the assignment sheet)
 
 - A music item is a single **track**, an **album**, or a **playlist** of arbitrary length. Only metadata is stored; tracks are referenced, not uploaded.
@@ -29,13 +27,19 @@ npm run start:dev
 ```
 
 - API base path: `http://localhost:3000/api/v1`
-- Swagger UI: `http://localhost:3000/api/docs`
+- Swagger UI: `http://localhost:3000/api/docs` (click "Authorize" and enter a user id)
+- The SQLite database is created as `backend/music.sqlite` (override with `DB_PATH`) and seeded with demo data on first start: users `1` = Admin, `2` = Anna, `3` = Ben. Delete the file to reset.
+
+```bash
+npm test          # unit tests
+npm run test:e2e  # API tests against an in-memory database
+```
 
 ## Structure
 
 ```
 backend/src/
-├── common/          # current-user guard, roles guard, decorators, exception filter, pagination
+├── common/          # auth guard (X-User-Id + @Roles), decorators, exception filter, pagination
 ├── users/           # seeded users (read-only, no login/registration)
 ├── music-items/     # catalogue: tracks, albums, playlists + track lists
 ├── collections/     # per-user collection entries (reaction, favourite)
@@ -62,7 +66,7 @@ Rules:
 
 ## Identifying the Caller
 
-There is no login. Every request sends `X-User-Id` with the id of a seeded user; the role is read from that user's record (not sent by the client).
+There is no login. Every request sends `X-User-Id` with the id of a seeded user; the role is read from that user's record (not sent by the client). The only exception is `GET /users`, which is public so a client can show a user selection first.
 
 - Missing or unknown `X-User-Id` → `401`
 - Valid user without the required role, or acting on another user's collection → `403`
@@ -104,7 +108,7 @@ All paths are relative to `/api/v1`.
 
 | Method | Path          | Role | Success |
 | ------ | ------------- | ---- | ------- |
-| GET    | `/users`      | any  | 200     |
+| GET    | `/users`      | public | 200     |
 | GET    | `/users/{id}` | any  | 200     |
 
 ## Conventions
