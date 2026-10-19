@@ -117,3 +117,18 @@ All paths are relative to `/api/v1`.
 - **Pagination:** list responses use `{ "data": [...], "meta": { "page": 1, "limit": 20, "total": 57 } }`.
 - **Errors:** one format for all errors: `{ "statusCode": 404, "error": "Not Found", "message": "...", "path": "...", "timestamp": "..." }`.
 - **Status codes:** `400` validation, `401` no/unknown user, `403` forbidden, `404` not found, `409` conflict.
+
+## Deployment
+
+Every push to `master` updates the live app:
+
+- **Backend → Render**, configured in [`render.yaml`](render.yaml). The free plan sleeps when idle (the first request then takes ~30 s), and the SQLite database is reset to the demo data on every deploy.
+- **Frontend → GitHub Pages**, built by [`.github/workflows/deploy-frontend.yml`](.github/workflows/deploy-frontend.yml) against the backend URL in the repository variable `API_URL`. It can also be started manually in the Actions tab.
+
+One-time setup:
+
+1. **Render:** New → Blueprint → select this repository. Render reads `render.yaml` and creates `music-collection-backend`. Note its URL, e.g. `https://music-collection-backend.onrender.com`.
+2. **Repository variable:** Settings → Secrets and variables → Actions → Variables → `API_URL` = `<Render URL>/api/v1`.
+3. **GitHub Pages:** Settings → Pages → Source: **GitHub Actions**.
+
+The app is then at `https://<owner>.github.io/<repository>/`.
