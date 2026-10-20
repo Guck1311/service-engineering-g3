@@ -1,0 +1,20 @@
+# Render Blueprint for the NestJS backend (https://render.com/docs/blueprint-spec).
+# Render builds and redeploys it on every push to master.
+services:
+  - type: web
+    name: music-collection-backend
+    runtime: node
+    plan: free
+    branch: master
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    # Public endpoint, so the health check needs no X-User-Id header.
+    healthCheckPath: /api/v1/users
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # The free plan has no persistent disk: the SQLite file is recreated
+      # and re-seeded with the demo data on every deploy or restart.
+      - key: DB_PATH
+        value: music.sqlite
