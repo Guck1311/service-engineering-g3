@@ -55,14 +55,13 @@ export class SeedService implements OnApplicationBootstrap {
           releaseYear,
           genre,
         });
-      const [comeTogether, something, hereComesTheSun, getLucky, bohemian] =
-        await m.save(MusicItem, [
-          track('Come Together', 'The Beatles', 259, 1969, 'Rock'),
-          track('Something', 'The Beatles', 182, 1969, 'Rock'),
-          track('Here Comes the Sun', 'The Beatles', 185, 1969, 'Rock'),
-          track('Get Lucky', 'Daft Punk', 369, 2013, 'Electronic'),
-          track('Bohemian Rhapsody', 'Queen', 354, 1975, 'Rock'),
-        ]);
+      const [, , , getLucky, bohemian] = await m.save(MusicItem, [
+        track('Come Together', 'The Beatles', 259, 1969, 'Rock'),
+        track('Something', 'The Beatles', 182, 1969, 'Rock'),
+        track('Here Comes the Sun', 'The Beatles', 185, 1969, 'Rock'),
+        track('Get Lucky', 'Daft Punk', 369, 2013, 'Electronic'),
+        track('Bohemian Rhapsody', 'Queen', 354, 1975, 'Rock'),
+      ]);
 
       const [abbeyRoad, roadTrip] = await m.save(MusicItem, [
         m.create(MusicItem, {
@@ -71,19 +70,17 @@ export class SeedService implements OnApplicationBootstrap {
           artist: 'The Beatles',
           genre: 'Rock',
           releaseYear: 1969,
+          trackCount: 3,
+          durationSeconds: 626,
           externalUrl: 'https://open.spotify.com/album/0ETFjACtuP2ADo6LFhL6HN',
         }),
         m.create(MusicItem, {
           type: MusicItemType.PLAYLIST,
           title: 'Road Trip',
+          trackCount: 2,
+          durationSeconds: 723,
         }),
       ]);
-      const trackList = (container: MusicItem, tracks: MusicItem[]) =>
-        tracks.map((t, i) => ({
-          containerId: container.id,
-          trackId: t.id,
-          position: i + 1,
-        }));
 
       await m.insert(CollectionEntry, [
         {

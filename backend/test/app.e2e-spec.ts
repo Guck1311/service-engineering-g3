@@ -40,6 +40,7 @@ describe('Music Collection Manager API (e2e)', () => {
       .set(ANNA)
       .expect(200);
     expect(res.body.meta).toEqual({page: 1, limit: 20, total: 1});
+    // trackCount and durationSeconds are stored values now; they must match the seed.
     expect(res.body.data[0]).toMatchObject({
       title: 'Abbey Road',
       trackCount: 3,
@@ -54,13 +55,19 @@ describe('Music Collection Manager API (e2e)', () => {
     await api().post('/api/v1/music-items').set(ADMIN).send(track).expect(201);
   });
 
-  it('validates track lists of playlists', async () => {
-    const res = await api()
+  it('validates the body of new items', async () => {
+    // title missing
+    await api()
       .post('/api/v1/music-items')
       .set(ADMIN)
-      .send({type: 'PLAYLIST', title: 'Mix', trackIds: [1, 6]})
+      .send({type: 'PLAYLIST'})
       .expect(400);
-    expect(res.body.message).toBe('These ids are not existing tracks: 6');
+    // negative trackCount (remove this call if you did not add trackCount)
+    await api()
+      .post('/api/v1/music-items')
+      .set(ADMIN)
+      .send({type: 'PLAYLIST', title: 'Mix', trackCount: -1})
+      .expect(400);
   });
 
   it('manages the own collection and rejects DISLIKE + favourite', async () => {
