@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {InjectDataSource, InjectRepository} from '@nestjs/typeorm';
-import {DataSource, EntityManager, In, Like, Repository} from 'typeorm';
+import {InjectRepository} from '@nestjs/typeorm';
+import {In, Like, Repository} from 'typeorm';
 import {Page, toPage} from '../common/pagination.js';
 import {Rating} from '../ratings/rating.entity.js';
 import {
@@ -12,9 +12,8 @@ import {
   UpdateMusicItemDto,
 } from './dto/create-music-item.dto.js';
 import {MusicItemQueryDto} from './dto/music-item-query.dto.js';
-import {MusicItemDetailDto, MusicItemDto} from './dto/music-item.dto.js';
-import {MusicItemTrack} from './music-item-track.entity.js';
-import {MusicItem, MusicItemType} from './music-item.entity.js';
+import {MusicItemDto} from './dto/music-item.dto.js';
+import {MusicItem} from './music-item.entity.js';
 
 /** Rating fields that are merged into every {@link MusicItemDto}. */
 interface RatingSummary {
@@ -24,7 +23,7 @@ interface RatingSummary {
 
 /**
  * Business logic of the catalogue: querying, creating, replacing and deleting
- * music items and their track lists, and mapping them to response DTOs.
+ * music items, and mapping them to response DTOs.
  *
  * Exported so other modules can check that an item exists ({@link getById})
  * and build item DTOs with rating summaries ({@link toDtos}).
@@ -32,7 +31,6 @@ interface RatingSummary {
 @Injectable()
 export class MusicItemsService {
   constructor(
-    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(MusicItem) private readonly items: Repository<MusicItem>,
     @InjectRepository(Rating) private readonly ratings: Repository<Rating>,
   ) {}
@@ -55,8 +53,7 @@ export class MusicItemsService {
 
     const [items, total] = await this.items.findAndCount({
       where,
-      relations: {tracks: {track: true}},
-      order: {id: 'ASC', tracks: {position: 'ASC'}},
+      order: {id: 'ASC'},
       skip: query.skip,
       take: query.limit,
     });
@@ -64,26 +61,20 @@ export class MusicItemsService {
   }
 
   /**
-   * Loads one item with its ordered track list.
+   * Loads one item.
    *
    * @param id - Item id.
-   * @returns The item including its tracks.
+   * @returns The item.
    * @throws NotFoundException if the item does not exist.
    */
-  async findOne(id: number): Promise<MusicItemDetailDto> {
-    const item = await this.items.findOne({
-      where: {id},
-      relations: {tracks: {track: true}},
-      order: {tracks: {position: 'ASC'}},
-    });
-    if (!item) {
-      throw new NotFoundException(`Music item ${id} not found`);
-    }
-    return this.toDetailDto(item);
+  async findOne(id: number): Promise<MusicItemDto> {
+    const item = await this.getById(id);
+    const [dto] = await this.toDtos([item]);
+    return dto;
   }
 
   /**
-   * Loads an item without relations; used by other modules to check existence.
+   * Loads an item entity; used by other modules to check existence.
    *
    * @param id - Item id.
    * @returns The item entity.
@@ -98,55 +89,39 @@ export class MusicItemsService {
   }
 
   /**
-   * Adds an item to the catalogue. The item and its track list are written
-   * in one transaction.
+   * Adds an item to the catalogue.
    *
    * @param dto - The new item.
-   * @returns The created item including its tracks.
-   * @throws BadRequestException if the item breaks a rule of {@link validate}.
+   * @returns The created item.
    */
-  async create(dto: CreateMusicItemDto): Promise<MusicItemDetailDto> {
-    await this.validate(dto);
-    const id = await this.dataSource.transaction(async manager => {
-      const item = await manager.save(
-        manager.create(MusicItem, this.toColumns(dto)),
-      );
-      await this.replaceTracks(manager, item.id, dto.trackIds ?? []);
-      return item.id;
-    });
-    return this.findOne(id);
+  async create(dto: CreateMusicItemDto): Promise<MusicItemDto> {
+    const item = await this.items.save(this.items.create(this.toColumns(dto)));
+    return this.findOne(item.id);
   }
 
   /**
-   * Replaces the metadata and the track list of an item in one transaction.
+   * Replaces the metadata of an item.
    *
    * @param id - Item id.
    * @param dto - The complete new state of the item.
-   * @returns The updated item including its tracks.
+   * @returns The updated item.
    * @throws NotFoundException if the item does not exist.
-   * @throws BadRequestException if the type would change or a rule of {@link validate} is broken.
+   * @throws BadRequestException if the type would change.
    */
-  async replace(
-    id: number,
-    dto: UpdateMusicItemDto,
-  ): Promise<MusicItemDetailDto> {
+  async replace(id: number, dto: UpdateMusicItemDto): Promise<MusicItemDto> {
     const existing = await this.getById(id);
     if (existing.type !== dto.type) {
       throw new BadRequestException(
         'The type of a music item cannot be changed',
       );
     }
-    await this.validate(dto, id);
-    await this.dataSource.transaction(async manager => {
-      await manager.update(MusicItem, id, this.toColumns(dto));
-      await this.replaceTracks(manager, id, dto.trackIds ?? []);
-    });
+    await this.items.update(id, this.toColumns(dto));
     return this.findOne(id);
   }
 
   /**
-   * Deletes an item. Collection entries, track list positions, comments and
-   * ratings that reference it are removed by `ON DELETE CASCADE`.
+   * Deletes an item. Collection entries, comments and ratings that reference
+   * it are removed by `ON DELETE CASCADE`.
    *
    * @param id - Item id.
    * @throws NotFoundException if the item does not exist.
@@ -160,7 +135,7 @@ export class MusicItemsService {
    * Maps entities to response DTOs, including their rating summaries,
    * which are loaded with one query for all items.
    *
-   * @param items - Entities with the `tracks.track` relation loaded.
+   * @param items - The entities to map.
    * @returns The DTOs in the same order.
    */
   async toDtos(items: MusicItem[]): Promise<MusicItemDto[]> {
@@ -168,39 +143,11 @@ export class MusicItemsService {
     return items.map(item => this.toDto(item, summaries));
   }
 
-  /** Maps an item and its tracks, each with its own rating summary. */
-  private async toDetailDto(item: MusicItem): Promise<MusicItemDetailDto> {
-    const tracks = item.tracks.map(entry => entry.track);
-    const summaries = await this.ratingSummaries([
-      item.id,
-      ...tracks.map(t => t.id),
-    ]);
-    return {
-      ...this.toDto(item, summaries),
-      tracks: item.tracks.map(entry => ({
-        position: entry.position,
-        track: this.toDto({...entry.track, tracks: []}, summaries),
-      })),
-    };
-  }
-
-  /**
-   * Maps one item; for albums and playlists the duration is the sum of the
-   * track durations.
-   */
+  /** Maps one item together with its rating summary. */
   private toDto(
     item: MusicItem,
     summaries: Map<number, RatingSummary>,
   ): MusicItemDto {
-    const tracks = item.tracks ?? [];
-    const durationSeconds =
-      item.type === MusicItemType.TRACK
-        ? item.durationSeconds
-        : tracks.reduce(
-            (sum, entry) => sum + (entry.track.durationSeconds ?? 0),
-            0,
-          );
-
     return {
       id: item.id,
       type: item.type,
@@ -208,12 +155,12 @@ export class MusicItemsService {
       artist: item.artist,
       genre: item.genre,
       releaseYear: item.releaseYear,
-      durationSeconds,
+      durationSeconds: item.durationSeconds,
       externalUrl: item.externalUrl,
-      trackCount: tracks.length,
       ...(summaries.get(item.id) ?? {averageRating: null, ratingCount: 0}),
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
+      trackCount: item.trackCount,
     };
   }
 
@@ -251,53 +198,6 @@ export class MusicItemsService {
     );
   }
 
-  /**
-   * Checks the rules that depend on the item type and on other items:
-   * - a track has no track list;
-   * - albums and playlists don't set `durationSeconds` (it is computed);
-   * - an item cannot contain itself;
-   * - all `trackIds` reference existing items of type `TRACK`.
-   *
-   * @param dto - The item to check.
-   * @param ownId - Id of the item being replaced, if any.
-   * @throws BadRequestException if a rule is broken.
-   */
-  private async validate(
-    dto: CreateMusicItemDto,
-    ownId?: number,
-  ): Promise<void> {
-    const trackIds = dto.trackIds ?? [];
-
-    if (dto.type === MusicItemType.TRACK) {
-      if (trackIds.length > 0) {
-        throw new BadRequestException('A track cannot contain other tracks');
-      }
-      return;
-    }
-    if (dto.durationSeconds !== undefined) {
-      throw new BadRequestException(
-        'durationSeconds is computed from the tracks of an album or playlist',
-      );
-    }
-    if (ownId !== undefined && trackIds.includes(ownId)) {
-      throw new BadRequestException('A music item cannot contain itself');
-    }
-
-    const uniqueIds = [...new Set(trackIds)];
-    const tracks = await this.items.findBy({
-      id: In(uniqueIds),
-      type: MusicItemType.TRACK,
-    });
-    const found = new Set(tracks.map(track => track.id));
-    const invalid = uniqueIds.filter(id => !found.has(id));
-    if (invalid.length > 0) {
-      throw new BadRequestException(
-        `These ids are not existing tracks: ${invalid.join(', ')}`,
-      );
-    }
-  }
-
-  /** Maps a request DTO to entity columns; omitted optional fields become `null`. */
   private toColumns(dto: CreateMusicItemDto): Partial<MusicItem> {
     return {
       type: dto.type,
@@ -306,32 +206,8 @@ export class MusicItemsService {
       genre: dto.genre ?? null,
       releaseYear: dto.releaseYear ?? null,
       durationSeconds: dto.durationSeconds ?? null,
+      trackCount: dto.trackCount ?? null,
       externalUrl: dto.externalUrl ?? null,
     };
-  }
-
-  /**
-   * Replaces the track list of an album or playlist; positions start at 1.
-   *
-   * @param manager - Entity manager of the surrounding transaction.
-   * @param containerId - Id of the album or playlist.
-   * @param trackIds - Ordered track ids.
-   */
-  private async replaceTracks(
-    manager: EntityManager,
-    containerId: number,
-    trackIds: number[],
-  ) {
-    await manager.delete(MusicItemTrack, {containerId});
-    if (trackIds.length > 0) {
-      await manager.insert(
-        MusicItemTrack,
-        trackIds.map((trackId, index) => ({
-          containerId,
-          trackId,
-          position: index + 1,
-        })),
-      );
-    }
   }
 }

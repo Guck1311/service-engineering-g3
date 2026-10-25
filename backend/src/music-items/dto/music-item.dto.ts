@@ -51,10 +51,6 @@ export class MusicItemDto {
   })
   externalUrl: string | null;
 
-  /** Number of tracks in an album or playlist; 0 for a track. */
-  @ApiProperty({example: 2, description: 'Number of tracks (0 for a track)'})
-  trackCount: number;
-
   /** Average stars rounded to one decimal, or `null` if not rated yet. */
   @ApiProperty({
     type: Number,
@@ -75,25 +71,8 @@ export class MusicItemDto {
   /** Time of the last update. */
   @ApiProperty()
   updatedAt: Date;
-}
 
-/** One position in the track list of an album or playlist. */
-export class TrackEntryDto {
-  /** 1-based position. */
-  @ApiProperty({
-    example: 1,
-    description: '1-based position in the album or playlist',
-  })
-  position: number;
-
-  /** The track at this position. */
-  @ApiProperty({type: MusicItemDto})
-  track: MusicItemDto;
-}
-
-/** A music item including its ordered track list, returned by the single-item endpoints. */
-export class MusicItemDetailDto extends MusicItemDto {
-  /** Ordered track list; empty for a track. */
-  @ApiProperty({type: [TrackEntryDto]})
-  tracks: TrackEntryDto[];
+  /** Number of tracks of an album or playlist, or `null`. */
+  @ApiProperty({type: Number, nullable: true, example: 17})
+  trackCount: number | null;
 }

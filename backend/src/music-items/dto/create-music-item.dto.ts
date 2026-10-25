@@ -79,17 +79,11 @@ export class CreateMusicItemDto {
   @IsUrl()
   externalUrl?: string;
 
-  /** Albums and playlists only: ordered ids of `TRACK` items (at most 1000). */
-  @ApiPropertyOptional({
-    type: [Number],
-    example: [1, 2],
-    description: 'Albums and playlists only: ordered ids of TRACK items',
-  })
+  @ApiPropertyOptional({minimum: 0})
   @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(1000)
-  @IsInt({each: true})
-  trackIds?: number[];
+  @IsInt()
+  @Min(0)
+  trackCount?: number;
 }
 
 /** Request body of `PUT /music-items/{id}`. PUT replaces the whole item, so it takes the same fields as POST. */

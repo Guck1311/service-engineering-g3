@@ -27,7 +27,7 @@ import {
   UpdateMusicItemDto,
 } from './dto/create-music-item.dto.js';
 import {MusicItemQueryDto} from './dto/music-item-query.dto.js';
-import {MusicItemDetailDto, MusicItemDto} from './dto/music-item.dto.js';
+import {MusicItemDto} from './dto/music-item.dto.js';
 import {MusicItemsService} from './music-items.service.js';
 
 /**
@@ -57,16 +57,16 @@ export class MusicItemsController {
   }
 
   /**
-   * `GET /music-items/{id}` – returns one item with its track list.
+   * `GET /music-items/{id}` – returns one item.
    *
    * @param id - Item id from the path.
-   * @returns The item including its tracks.
+   * @returns The item.
    */
   @Get(':id')
-  @ApiOperation({summary: 'Get a music item including its track list'})
-  @ApiOkResponse({type: MusicItemDetailDto})
+  @ApiOperation({summary: 'Get a music item'})
+  @ApiOkResponse({type: MusicItemDto})
   @ApiErrors(404)
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<MusicItemDetailDto> {
+  findOne(@Param('id', ParseIntPipe) id: number): Promise<MusicItemDto> {
     return this.musicItemsService.findOne(id);
   }
 
@@ -81,14 +81,14 @@ export class MusicItemsController {
   @ApiOperation({
     summary: 'Add a track, album or playlist to the catalogue (admin)',
   })
-  @ApiCreatedResponse({type: MusicItemDetailDto})
+  @ApiCreatedResponse({type: MusicItemDto})
   @ApiErrors(400, 403)
-  create(@Body() dto: CreateMusicItemDto): Promise<MusicItemDetailDto> {
+  create(@Body() dto: CreateMusicItemDto): Promise<MusicItemDto> {
     return this.musicItemsService.create(dto);
   }
 
   /**
-   * `PUT /music-items/{id}` – replaces an item and its track list (admin only).
+   * `PUT /music-items/{id}` – replaces an item (admin only).
    *
    * @param id - Item id from the path.
    * @param dto - The complete new state of the item.
@@ -96,13 +96,13 @@ export class MusicItemsController {
    */
   @Put(':id')
   @Roles(Role.ADMIN)
-  @ApiOperation({summary: 'Replace a music item and its track list (admin)'})
-  @ApiOkResponse({type: MusicItemDetailDto})
+  @ApiOperation({summary: 'Replace a music item (admin)'})
+  @ApiOkResponse({type: MusicItemDto})
   @ApiErrors(400, 403, 404)
   replace(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMusicItemDto,
-  ): Promise<MusicItemDetailDto> {
+  ): Promise<MusicItemDto> {
     return this.musicItemsService.replace(id, dto);
   }
 

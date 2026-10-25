@@ -55,7 +55,7 @@ export class CollectionsService {
 
     const [entries, total] = await this.entries.findAndCount({
       where,
-      relations: {user: true, musicItem: {tracks: {track: true}}},
+      relations: {user: true, musicItem: true},
       order: {userId: 'ASC', addedAt: 'DESC', id: 'DESC'},
       skip: query.skip,
       take: query.limit,
@@ -136,7 +136,7 @@ export class CollectionsService {
   ): Promise<CollectionEntryDto> {
     const entry = await this.entries.findOneOrFail({
       where: {userId, musicItemId},
-      relations: {user: true, musicItem: {tracks: {track: true}}},
+      relations: {user: true, musicItem: true},
     });
     const [dto] = await this.toDtos([entry]);
     return dto;

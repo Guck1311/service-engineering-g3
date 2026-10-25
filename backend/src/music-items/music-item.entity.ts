@@ -7,7 +7,6 @@ import {
   UpdateDateColumn,
   type Relation,
 } from 'typeorm';
-import {MusicItemTrack} from './music-item-track.entity.js';
 
 /** Kind of music item. */
 export enum MusicItemType {
@@ -58,9 +57,9 @@ export class MusicItem {
   @Column({type: 'varchar', nullable: true})
   externalUrl: string | null;
 
-  /** Ordered track list of an album or playlist (empty for tracks). */
-  @OneToMany(() => MusicItemTrack, entry => entry.container)
-  tracks: Relation<MusicItemTrack[]>;
+  /** Number of tracks of an album or playlist; null for a track or if unknown. */
+  @Column({type: 'integer', nullable: true})
+  trackCount: number | null;
 
   /** Set by the database when the item is created. */
   @CreateDateColumn()

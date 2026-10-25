@@ -7,7 +7,6 @@ import {
 } from '../collections/collection-entry.entity.js';
 import {Comment} from '../comments/comment.entity.js';
 import {Role} from '../common/role.enum.js';
-import {MusicItemTrack} from '../music-items/music-item-track.entity.js';
 import {MusicItem, MusicItemType} from '../music-items/music-item.entity.js';
 import {Rating} from '../ratings/rating.entity.js';
 import {User} from '../users/user.entity.js';
@@ -85,10 +84,6 @@ export class SeedService implements OnApplicationBootstrap {
           trackId: t.id,
           position: i + 1,
         }));
-      await m.insert(MusicItemTrack, [
-        ...trackList(abbeyRoad, [comeTogether, something, hereComesTheSun]),
-        ...trackList(roadTrip, [getLucky, bohemian, hereComesTheSun]),
-      ]);
 
       await m.insert(CollectionEntry, [
         {
