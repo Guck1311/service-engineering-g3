@@ -41,7 +41,7 @@ npm run test:e2e  # API tests against an in-memory database
 backend/src/
 ├── common/          # auth guard (X-User-Id + @Roles), decorators, exception filter, pagination
 ├── users/           # seeded users (read-only, no login/registration)
-├── music-items/     # catalogue: tracks, albums, playlists + track lists
+├── music-items/     # catalogue: tracks, albums, playlists
 ├── collections/     # per-user collection entries (reaction, favourite)
 ├── comments/
 ├── ratings/         # 1-5 stars, one per user and item
@@ -53,8 +53,7 @@ backend/src/
 | Entity            | Fields                                                                                                                       | Notes                                                                       |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `User`            | `id`, `name`, `role` (`ADMIN` \| `USER`)                                                                                     | Seeded, no user management                                                  |
-| `MusicItem`       | `id`, `type` (`TRACK` \| `ALBUM` \| `PLAYLIST`), `title`, `artist?`, `genre?`, `releaseYear?`, `durationSeconds?`, `externalUrl?`, `createdAt`, `updatedAt` | `externalUrl` references the actual track (e.g. Spotify/YouTube link)       |
-| `MusicItemTrack`  | `containerId` → `MusicItem`, `trackId` → `MusicItem`, `position`                                                             | Ordered track list of an album/playlist; only `TRACK` items can be entries |
+| `MusicItem`       | `id`, `type` (`TRACK` \| `ALBUM` \| `PLAYLIST`), `title`, `artist?`, `genre?`, `releaseYear?`, `durationSeconds?`, `trackCount?`, `externalUrl?`, `createdAt`, `updatedAt` | `externalUrl` references the actual music (e.g. Spotify/YouTube link); albums and playlists store `trackCount` and their total `durationSeconds` |
 | `CollectionEntry` | `id`, `userId`, `musicItemId`, `reaction` (`NONE` \| `LIKE` \| `DISLIKE`), `favourite` (boolean), `addedAt`                   | Unique per (`userId`, `musicItemId`)                                        |
 | `Comment`         | `id`, `userId`, `musicItemId`, `text`, `createdAt`                                                                           |                                                                             |
 | `Rating`          | `userId`, `musicItemId`, `stars` (1–5), `updatedAt`                                                                          | Unique per (`userId`, `musicItemId`)                                        |
@@ -62,7 +61,8 @@ backend/src/
 Rules:
 
 - `reaction` defaults to `NONE`, `favourite` to `false`. `LIKE` + favourite and `NONE` + favourite are allowed; `DISLIKE` + favourite is rejected with `400`.
-- Deleting a music item also removes it from all collections, track lists, comments and ratings.
+- Deleting a music item also removes it from all collections, comments and ratings.
+- Albums and playlists do not link to individual tracks; the tracks themselves are only referenced via `externalUrl`.
 
 ## Identifying the Caller
 
@@ -80,9 +80,9 @@ All paths are relative to `/api/v1`.
 | Method | Path                | Role  | Success | Notes                                                                 |
 | ------ | ------------------- | ----- | ------- | --------------------------------------------------------------------- |
 | GET    | `/music-items`      | any   | 200     | Filters `?type=`, `?search=`; pagination `?page=&limit=`              |
-| GET    | `/music-items/{id}` | any   | 200     | Includes the track list (album/playlist) and average rating           |
-| POST   | `/music-items`      | ADMIN | 201     | Album/playlist body takes an ordered `trackIds` array                 |
-| PUT    | `/music-items/{id}` | ADMIN | 200     | Replaces metadata and track list                                      |
+| GET    | `/music-items/{id}` | any   | 200     | Includes the average rating and number of ratings                     |
+| POST   | `/music-items`      | ADMIN | 201     | Albums/playlists may set `trackCount` and total `durationSeconds`     |
+| PUT    | `/music-items/{id}` | ADMIN | 200     | Replaces the metadata; the type cannot change                         |
 | DELETE | `/music-items/{id}` | ADMIN | 204     |                                                                       |
 
 ### Collections

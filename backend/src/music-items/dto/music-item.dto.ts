@@ -2,8 +2,8 @@ import {ApiProperty} from '@nestjs/swagger';
 import {MusicItemType} from '../music-item.entity.js';
 
 /**
- * A music item as returned by the API, with computed fields
- * (`durationSeconds` of albums/playlists, `trackCount`, rating summary).
+ * A music item as returned by the API: the stored metadata plus the computed
+ * rating summary (`averageRating`, `ratingCount`).
  */
 export class MusicItemDto {
   /** Item id. */
@@ -34,12 +34,12 @@ export class MusicItemDto {
   @ApiProperty({type: Number, nullable: true, example: 1969})
   releaseYear: number | null;
 
-  /** Length in seconds; for albums and playlists the sum of their tracks. */
+  /** Length in seconds; for albums and playlists the total length. */
   @ApiProperty({
     type: Number,
     nullable: true,
     example: 444,
-    description: 'For albums and playlists: sum of the track durations',
+    description: 'For albums and playlists: total length as set by the admin',
   })
   durationSeconds: number | null;
 
