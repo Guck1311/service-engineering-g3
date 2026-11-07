@@ -1,7 +1,5 @@
 import {ApiProperty, ApiPropertyOptional} from '@nestjs/swagger';
 import {
-  ArrayMaxSize,
-  IsArray,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -18,7 +16,7 @@ import {MusicItemType} from '../music-item.entity.js';
  * Request body of `POST /music-items`.
  *
  * The decorators validate the input; rules that need the database (e.g. that
- * `trackIds` reference existing tracks) are checked in `MusicItemsService`.
+ * the type of an existing item cannot change) are checked in `MusicItemsService`.
  */
 export class CreateMusicItemDto {
   /** Track, album or playlist. */
@@ -59,11 +57,11 @@ export class CreateMusicItemDto {
   @Max(9999)
   releaseYear?: number;
 
-  /** Length in seconds; tracks only. */
+  /** Length in seconds; for albums and playlists the total length. */
   @ApiPropertyOptional({
     example: 259,
     description:
-      'Tracks only; albums and playlists compute it from their tracks',
+      'Length of a track, or total length of an album or playlist as set by the admin',
   })
   @IsOptional()
   @IsInt()
@@ -79,7 +77,12 @@ export class CreateMusicItemDto {
   @IsUrl()
   externalUrl?: string;
 
-  @ApiPropertyOptional({minimum: 0})
+  /** Number of tracks of an album or playlist. */
+  @ApiPropertyOptional({
+    minimum: 0,
+    example: 17,
+    description: 'Number of tracks of an album or playlist',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)

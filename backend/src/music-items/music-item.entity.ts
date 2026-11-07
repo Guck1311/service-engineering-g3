@@ -2,10 +2,8 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-  type Relation,
 } from 'typeorm';
 
 /** Kind of music item. */
@@ -20,7 +18,7 @@ export enum MusicItemType {
 
 /**
  * One entry of the shared catalogue. Tracks, albums and playlists share a
- * table; albums and playlists list their tracks via {@link MusicItemTrack}.
+ * table; albums and playlists store their track count and total duration.
  * Only metadata is stored: `externalUrl` references the actual audio.
  */
 @Entity()
@@ -49,7 +47,7 @@ export class MusicItem {
   @Column({type: 'integer', nullable: true})
   releaseYear: number | null;
 
-  /** Set for tracks only; computed from the tracks for albums and playlists. */
+  /** Length of a track, or total length of an album or playlist, in seconds; set by the admin. */
   @Column({type: 'integer', nullable: true})
   durationSeconds: number | null;
 
