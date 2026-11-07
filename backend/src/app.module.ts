@@ -22,8 +22,7 @@ import {UsersModule} from './users/users.module.js';
       type: 'better-sqlite3',
       database: process.env.DB_PATH ?? 'music.sqlite',
       autoLoadEntities: true,
-      // Creates/updates the tables from the entities on startup. Fine for this
-      // exercise; a production setup would use migrations instead.
+
       synchronize: true,
     }),
     UsersModule,
