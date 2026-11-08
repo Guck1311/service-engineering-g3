@@ -2,7 +2,10 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinTable,
+  ManyToMany,
   PrimaryGeneratedColumn,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
 
@@ -66,4 +69,17 @@ export class MusicItem {
   /** Set by the database on every update. */
   @UpdateDateColumn()
   updatedAt: Date;
+  
+  /** Tracks of an album or playlist; empty for a track. */
+  @ManyToMany(() => MusicItem, item => item.containers)
+  @JoinTable({
+    name: 'music_item_track',
+    joinColumn: {name: 'containerId'},
+    inverseJoinColumn: {name: 'trackId'},
+  })
+  tracks: Relation<MusicItem[]>;
+
+  /** Albums and playlists that contain this track. */
+  @ManyToMany(() => MusicItem, item => item.tracks)
+  containers: Relation<MusicItem[]>;
 }
