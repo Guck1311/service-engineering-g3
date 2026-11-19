@@ -6,6 +6,10 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // URL path the app is served under. GitHub Pages serves project sites under
+  // /<repository>/, so the deploy workflow sets VITE_BASE; locally it is /.
+  // The router reads the same value via import.meta.env.BASE_URL.
+  base: process.env.VITE_BASE ?? '/',
   plugins: [
     vue(),
     vueDevTools(),

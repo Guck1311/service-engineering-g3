@@ -564,13 +564,72 @@ item created/saved/deleted. A detail or edit page for a missing item (404) now s
   | add "Come Together" | success toast "Added "Come Together" to your collection." |
   | backend unreachable, open the catalogue | "The server cannot be reached. Is the backend running?" + Retry |
 
+## Step 9 - Deployment Preparation and Submission
+
+### Deployment
+
+| Part | Where | Configured in |
+| --- | --- | --- |
+| Backend | Render (free plan) | `render.yaml` |
+| Frontend | GitHub Pages | `.github/workflows/deploy-frontend.yml` |
+| Frontend CI | GitHub Actions | `.github/workflows/frontend.yml` |
+
+- **Base path**: `vite.config.ts` reads `base` from `VITE_BASE`. The deploy workflow
+  sets it to `/<repository>/`; locally it is `/`.
+- **Backend URL**: the workflow builds with `VITE_API_URL` from the repository variable
+  `API_URL`. Vite compiles it into the bundle.
+- **Deep links**: the workflow copies `index.html` to `404.html` (section 5).
+- **CI** runs `ci:lint` and `ci:format`, which only *check*. The normal `lint` and
+  `format` scripts fix files, which in CI would hide problems instead of failing. CI then
+  runs the tests and the build (including the type check).
+
+### Problems
+
+- **Workflow missing on master**: the README described a deploy workflow that only
+  existed on the old `feature/frontend` branch. It was taken over and adapted (tests
+  before the build, comments).
+- **Render health check**: `render.yaml` used `/api/v1/users`, described as "public".
+  On `master` it requires `X-User-Id` (401), so Render would mark every deploy as
+  failed. The health check now uses the public OpenAPI document `/api/docs-json`.
+- **Git Bash path conversion**: building locally with `VITE_BASE=/service-engineering-g3/`
+  produced `/Program Files/Git/service-engineering-g3/...` paths, because Git Bash on
+  Windows converts arguments that look like paths. `MSYS_NO_PATHCONV=1` disables this
+  (not needed in CI on Linux).
+
+### Checks
+
+- Production build with the Pages settings: every asset path starts with
+  `/service-engineering-g3/`; API URL and base path are in the bundle.
+- A small Node server mimicking GitHub Pages (static files, unknown paths → `404.html`):
+  `/service-engineering-g3/catalogue/6` and `/collections?userId=2` return the app, and
+  all referenced assets load (200). The HTTP status of such deep links is 404 (a known
+  limitation of this approach); the browser shows the page normally.
+
+### Going live (one-time, needs the project accounts)
+
+1. **Render**: New → Blueprint → this repository → `music-collection-backend`.
+2. **GitHub**: Settings → Secrets and variables → Actions → Variables →
+   `API_URL` = `<Render URL>/api/v1`.
+3. **GitHub**: Settings → Pages → Source: **GitHub Actions**.
+4. Merge `feature/vue-frontend` into `master`; the push starts both workflows.
+
+### Submission files
+
+| File | Content |
+| --- | --- |
+| `submission/exercise-2-frontend.pdf` | this document |
+| `submission/exercise-2-source.zip` | source files of the repository (no `node_modules`, `dist`, database) |
+
 ---
 
 # Part 2 - Vue.js Reference
 
 ## 1. Distinguishing Features
 
-*Introduced in step 1, extended in later steps.*
+*Introduced in step 1, completed in step 9.*
+
+Vue calls itself "the progressive JavaScript framework": approachable like a library,
+complete like a framework. Its core ideas:
 
 - **Progressive framework**: Vue can be added to a single page with a `<script>` tag or
   used as a full SPA framework with router, store and build tooling. The core library
@@ -592,6 +651,52 @@ item created/saved/deleted. A detail or edit page for a missing item (404) now s
   it easy to reuse logic in *composables* and works well with TypeScript.
 - **Client-side rendering** in our app. Server-side rendering and hydration are
   available through Nuxt, a meta-framework built on Vue, which we don't need.
+
+### Reactivity in one example
+
+```ts
+const count = ref(0)                         // reactive value (a Proxy-backed object)
+const double = computed(() => count.value * 2) // Vue records: "double depends on count"
+watch(count, (n) => console.log('changed', n)) // side effect on change
+
+count.value++  // -> double is recalculated, the watcher runs, and only the components
+               //    whose templates read `count` or `double` are re-rendered
+```
+
+There is no `setState` and no dependency array: Vue tracks **which reactive values were
+read** while a `computed`, watcher or render function ran, and re-runs exactly those
+when the values change. This is the basis of everything else: stores (section 3) are
+reactive state outside components, the theme switcher (section 4) is a chain
+`matchMedia → ref → computed → watchEffect → DOM`.
+
+### Vue compared with other frameworks
+
+| | **Vue 3** | React | Angular | Svelte 5 |
+| --- | --- | --- | --- | --- |
+| Templates | HTML templates + directives (JSX optional) | JSX | HTML templates + directives | HTML-like templates |
+| Change detection | fine-grained reactivity (Proxies), per component | re-run component function, diff virtual DOM | Zone.js / signals | compiler-generated updates (runes / signals) |
+| Rendering | virtual DOM with compiler optimizations (a VDOM-free "Vapor mode" is planned for 3.6; we use stable 3.5) | virtual DOM | incremental DOM | no virtual DOM |
+| Component logic | Composition API (`<script setup>`) or Options API | function components + hooks | classes + decorators, DI | `<script>` with runes |
+| Reuse of stateful logic | composables (`useAsync`) | hooks | services (DI) | runes in `.svelte.js` modules |
+| State management | Pinia (official) | many (Redux, Zustand, …) | services, NgRx, signals | stores / runes |
+| Router | Vue Router (official) | React Router, TanStack (3rd party) | built in | SvelteKit |
+| Styling | `<style scoped>`, CSS modules, `v-bind()` in CSS | CSS-in-JS, CSS modules | component styles (emulated encapsulation) | scoped by default |
+| SSR / meta-framework | Nuxt | Next.js | Angular SSR | SvelteKit |
+| Web components | `defineCustomElement()` | - (can consume) | Angular Elements | `customElement` option |
+
+### Where the features appear in our app
+
+| Feature | Example in the code | Section |
+| --- | --- | --- |
+| SFC with scoped SCSS | `AppNavbar.vue` | 4 |
+| `v-model` on own components | `StarRating` (`defineModel`), `PaginationNav` (`v-model:page`) | 2 |
+| Slots | `MusicItemCard` scoped slot `#actions`, `NotFoundState` default slot | 2 |
+| Composables | `useAsync`, `useOnlineStatus` | 6, 8 |
+| Fine-grained reactivity | navbar badge follows the collection store | 3 |
+| Lifecycle / cleanup | `onMounted` in `App.vue`, `onBeforeUnmount` in the catalogue | 2 |
+| Error hooks | `onErrorCaptured` in `ErrorBoundary`, `app.config.errorHandler` | 8 |
+| Built-in components | `<TransitionGroup>` (collection list, toasts) | 2, 8 |
+| Plugins | Pinia, Vue Router, our `errorHandling` plugin (`app.use`) | 8 |
 
 ## 2. Component Model and Life Cycle
 
@@ -1188,7 +1293,7 @@ app.use(router)
 | **Catch-all (404)** | `/:pathMatch(.*)*` | must match last |
 | **Lazy loading** | `component: () => import('...')` | separate chunk, loaded on the first visit |
 | **Route meta** | `meta: { title, requiresAdmin }` | custom data per route, read by guards |
-| **Guards** | `router.beforeEach`, `router.afterEach` | run around every navigation (title now, admin check in step 6) |
+| **Guards** | `router.beforeEach`, `router.afterEach`, `onBeforeRouteLeave` | run around every navigation (admin check, page title, unsaved-changes warning) |
 | **Scroll behaviour** | `scrollBehavior` | restore the scroll position on Back, otherwise start at the top |
 
 ### Navigating
@@ -1253,8 +1358,22 @@ router.afterEach((to) => {
 ```
 
 Declaration merging extends Vue Router's `RouteMeta` type, so `to.meta.requiresAdmin` is
-type-checked. The admin guard (`beforeEach`) that uses this flag follows with the user
-state in step 6.
+type-checked. The admin guard reads it together with the session store:
+
+```ts
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAdmin) return true
+  const session = useSessionStore()
+  await session.ensureLoaded()   // direct page load: the user list may not be there yet
+  return session.isAdmin ? true : { name: 'catalogue', query: { denied: to.fullPath } }
+})
+```
+
+A guard returns `true` (continue), `false` (cancel) or a route (redirect). The guard
+only improves usability; the backend checks the role on every request anyway (403).
+
+**In-component guards** run only for one view. `MusicItemEditView` uses
+`onBeforeRouteLeave` to ask before discarding unsaved form changes (section 2).
 
 ### Active links
 
@@ -1267,7 +1386,15 @@ Bootstrap's `active` class itself, comparing `useRoute().path` with each entry's
 
 History mode needs the web server to answer every unknown path with `index.html`
 (otherwise reloading `/catalogue/6` gives the server's 404). Vite's dev server does
-this automatically. For static hosting such as GitHub Pages, this is handled in step 9.
+this automatically. GitHub Pages has no such setting, but it serves `404.html` for
+unknown paths, so the deploy workflow copies `index.html` to `404.html`: the SPA starts
+on any URL, and the router shows the matching page (step 9). The alternative,
+`createWebHashHistory()` (`/#/catalogue/6`), needs no server support at all but gives
+less readable URLs.
+
+Project sites live under `/<repository>/`, so the app is built with Vite's `base` set to
+`/service-engineering-g3/`. The router uses the same value
+(`createWebHistory(import.meta.env.BASE_URL)`).
 
 ## 6. Separating Logic from UI Components
 
@@ -1399,7 +1526,7 @@ View / component          calls a store or service, shows data and errors
       │
 Pinia store (step 6)      shared state, e.g. the current user's collection
       │
-Service (step 5)          one function per endpoint: getMusicItem(id), addToCollection(...)
+Service (step 5)          one function per endpoint: musicItemsService.get(id), collectionsService.add(...)
       │
 http.ts                   axios instance: base URL, X-User-Id header, ApiError conversion
       │
