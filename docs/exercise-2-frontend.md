@@ -699,6 +699,67 @@ reactive state outside components, the theme switcher (section 4) is a chain
 | Built-in components | `<TransitionGroup>` (collection list, toasts) | 2, 8 |
 | Plugins | Pinia, Vue Router, our `errorHandling` plugin (`app.use`) | 8 |
 
+### Concepts named in the assignment
+
+**Virtual DOM.** Vue renders components into a lightweight JavaScript tree (virtual
+nodes) and patches the real DOM with the difference. Unlike a plain VDOM diff, the
+template compiler marks which parts can change (*patch flags*, e.g. "only the class") and
+hoists static parts out of the render function, so updates skip everything static.
+
+**Functional components.** In React, every component is a function. In Vue, a
+functional component is a special, stateless kind: a plain function of props that
+returns virtual nodes, with no instance and no lifecycle:
+
+```ts
+import { h, type FunctionalComponent } from 'vue'
+const Badge: FunctionalComponent<{ label: string }> = (props, { slots }) =>
+  h('span', { class: 'badge' }, [props.label, slots.default?.()])
+```
+
+In Vue 3, normal (stateful) components are cheap, so functional components are rarely
+needed. Our app uses none; small presentational components like `MusicTypeBadge` are
+ordinary SFCs.
+
+**Standalone components.** The term comes from Angular, where components used to be
+declared in an `NgModule`. Vue never had modules: every SFC is standalone and is used
+by importing it where it is needed:
+
+```vue
+<script setup lang="ts">
+import CollectionButton from '@/components/CollectionButton.vue'  // usable in the template right away
+</script>
+```
+
+Global registration (`app.component('Name', Comp)`) exists but is not used here: local
+imports make dependencies visible and let the bundler drop unused components.
+
+**Reactivity.** See "Reactivity in one example" above and section 3.
+
+**Client-side vs. server-side rendering, hydration.** Our app is rendered on the
+client: the server delivers an empty `<div id="app">` and the JavaScript bundle, and the
+browser builds the page. With **server-side rendering** (Vue's `createSSRApp` and
+`renderToString`, usually through **Nuxt**), the server sends finished HTML for the
+requested URL. The browser shows it immediately, and **hydration** then attaches Vue to
+that existing HTML (event listeners, reactivity) instead of rendering it again. SSR helps
+first-page speed and search engines. For a tool behind a user switcher it adds a server
+and complexity without benefit, so we chose CSR (and static hosting on GitHub Pages).
+
+**Web components.** Vue can compile a component into a standard custom element that
+works in any HTML page or framework:
+
+```ts
+import { defineCustomElement } from 'vue'
+import StarRating from './components/StarRating.vue'
+customElements.define('star-rating', defineCustomElement(StarRating))
+// <star-rating model-value="4"></star-rating>
+```
+
+Custom elements render into a shadow DOM, so page-wide CSS (like our Bootstrap and icon
+font) does not reach inside. A component's own `<style>` is only included if the file is
+named `*.ce.vue`. Vue templates can also use existing custom elements. The compiler is told which tags
+are not Vue components with `compilerOptions.isCustomElement`. We don't need either
+direction, because the whole UI is one Vue app.
+
 ## 2. Component Model and Life Cycle
 
 *Introduced in step 7.*
