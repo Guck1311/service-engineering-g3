@@ -27,3 +27,18 @@ export function formatDateTime(iso: string): string {
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`
 }
+
+/** Short facts of a music item for cards and lists: ["1969", "Rock", "3 tracks", "47:03"]. */
+export function itemFacts(item: {
+  releaseYear: number | null
+  genre: string | null
+  trackCount: number | null
+  durationSeconds: number | null
+}): string[] {
+  const facts: string[] = []
+  if (item.releaseYear) facts.push(String(item.releaseYear))
+  if (item.genre) facts.push(item.genre)
+  if (item.trackCount !== null) facts.push(pluralize(item.trackCount, 'track'))
+  if (item.durationSeconds) facts.push(formatDuration(item.durationSeconds))
+  return facts
+}

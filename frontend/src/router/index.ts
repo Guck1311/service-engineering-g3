@@ -1,4 +1,11 @@
-import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory } from 'vue-router'
+import {
+  createRouter,
+  createWebHistory,
+  type LocationQuery,
+  type RouteRecordRaw,
+  type RouterHistory,
+} from 'vue-router'
+import type { MusicItemType } from '@/api/types'
 import { useSessionStore } from '@/stores/session'
 import CatalogueView from '@/views/CatalogueView.vue'
 
@@ -10,6 +17,16 @@ declare module 'vue-router' {
     /** Only the admin may open this page (checked by a guard in step 6). */
     requiresAdmin?: boolean
   }
+}
+
+const MUSIC_ITEM_TYPES: readonly MusicItemType[] = ['TRACK', 'ALBUM', 'PLAYLIST']
+
+/** Parses the catalogue's query; invalid values are ignored instead of reaching the API. */
+export function catalogueProps(query: LocationQuery) {
+  const search = typeof query.search === 'string' ? query.search : undefined
+  const type = MUSIC_ITEM_TYPES.find((t) => t === query.type)
+  const page = Number(query.page)
+  return { search, type, page: Number.isInteger(page) && page > 1 ? page : 1 }
 }
 
 /** Converts the `:id` path parameter into a number prop. */
@@ -24,6 +41,8 @@ export const routes: RouteRecordRaw[] = [
     name: 'catalogue',
     // Imported statically: the start page is part of the main bundle.
     component: CatalogueView,
+    // Filters live in the query (?search=road&type=ALBUM&page=2) and arrive as typed props.
+    props: (route) => catalogueProps(route.query),
     meta: { title: 'Catalogue' },
   },
   {

@@ -405,6 +405,64 @@ src/
 - **Navbar**: badge follows the store, the switcher changes the user and shows the
   admin badge.
 
+## Step 7 - Views and Components
+
+### Pages
+
+| Page | Data from | Features |
+| --- | --- | --- |
+| Catalogue | `useAsync(musicItemsService.list)` | search (debounced), type filter, pagination, all three stored in the URL; add/remove per card |
+| Detail | `useAsync(musicItemsService.get)` + child components | facts, link, collection button, like/dislike/favourite, ratings, comments; admin: edit, delete |
+| New / edit item | `MusicItemForm` | client-side validation (same rules as the backend), server errors with details, "unsaved changes" warning |
+| My collection | collection store | filter tabs with counts, reactions, remove (animated) |
+| All collections | `useAsync` with two service calls | all users or one (`?userId=`), table, pagination |
+
+### Components
+
+```
+src/components/
+├── MusicTypeBadge.vue      props → computed style
+├── StarRating.vue          defineModel (v-model), readonly mode with half stars
+├── ReactionControls.vue    props + typed emits, no store (presentational)
+├── PaginationNav.vue       defineModel('page') → v-model:page
+├── MusicItemCard.vue       scoped slot #actions="{ item }"
+├── CollectionButton.vue    uses the collection store itself (container)
+├── RatingPanel.vue         own data loading, emits 'rated'
+├── CommentSection.vue      own data loading, "load more", form with @submit.prevent
+├── MusicItemForm.vue       reactive form, v-model modifiers, defineExpose({ isDirty, markSaved })
+├── LoadingSpinner.vue
+└── ErrorAlert.vue          shows ApiError + details, emits 'retry'
+src/utils/music-item-form.ts  form state, validation and request body as plain functions
+```
+
+### Problems
+
+- **Non-reactive variable in a computed** (found by a test): `MusicItemForm` stored the
+  saved state in a plain `let pristine`. The `isDirty` computed read it, but Vue only
+  tracks *reactive* sources, so after `markSaved()` the computed kept its cached `true`
+  and the "unsaved changes" warning would have appeared after saving. Fix:
+  `const pristine = ref(...)`.
+- **`defineModel` without a listening parent** (test assumption): when the parent does
+  not listen to `update:page`, `defineModel` keeps the new value *locally*. The test
+  had expected the component to still be on the old page.
+
+### Result
+
+- `npm run test:unit`: 85 tests. New: component tests (v-model emits, events, scoped
+  slot, pagination, form validation and payload, `isDirty` via `defineExpose`), form
+  logic tests, and an integration test that renders the catalogue through the real
+  router with a mocked service (filters from the URL, filter buttons, error + retry).
+- Checked once against the running backend by rendering every page in the test DOM:
+
+  | Page | Rendered |
+  | --- | --- |
+  | `/catalogue` | 7 items; "In collection" on Anna's 2 |
+  | `/catalogue?type=ALBUM` | Abbey Road · 1969 · Rock · 3 tracks · 10:26, average 4.5 |
+  | `/catalogue/6` | facts, reaction buttons, 4.5 (2 ratings), seeded comment |
+  | `/collection` | Get Lucky, Abbey Road |
+  | `/collections` | 4 entries of Anna and Ben |
+  | `/catalogue/6/edit` as Admin | form filled with "Abbey Road", 3 tracks |
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -436,7 +494,234 @@ src/
 
 ## 2. Component Model and Life Cycle
 
-*Step 7.*
+*Introduced in step 7.*
+
+### Single-File Components
+
+A Vue app is a tree of components. Each component is a `.vue` file with up to three
+blocks:
+
+```vue
+<script setup lang="ts">
+// logic: runs ONCE per component instance, when it is created
+import { computed } from 'vue'
+const props = defineProps<{ type: MusicItemType }>()
+const style = computed(() => STYLES[props.type])
+</script>
+
+<template>
+  <!-- view: re-rendered whenever reactive data used here changes -->
+  <span :class="['badge', `text-bg-${style.variant}`]">{{ style.label }}</span>
+</template>
+
+<style scoped>
+/* styles limited to this component (section 4) */
+</style>
+```
+
+`<script setup>` is compiled into the component's `setup()` function. Everything
+declared at the top level (variables, functions, imports) is available in the template.
+
+Our component tree (simplified):
+
+```
+App
+├── AppNavbar ── UserSwitcher
+└── RouterView
+    ├── CatalogueView ── MusicItemCard* ── MusicTypeBadge, StarRating, [slot: CollectionButton]
+    │                 └─ PaginationNav, ErrorAlert, LoadingSpinner
+    ├── MusicItemDetailView ── MusicTypeBadge, CollectionButton, ReactionControls,
+    │                          RatingPanel ── StarRating*, CommentSection
+    ├── MusicItemEditView ── MusicItemForm
+    ├── MyCollectionView ── ReactionControls*
+    └── AllCollectionsView ── PaginationNav
+```
+
+### Communication between components
+
+**Props down, events up.** A parent passes data to a child as props. The child must not
+change props; it reports what happened with events, and the parent decides what to do.
+
+```vue
+<!-- ReactionControls.vue (child) -->
+<script setup lang="ts">
+const props = defineProps<{ reaction: Reaction; favourite: boolean }>()
+const emit = defineEmits<{ react: [reaction: Reaction]; toggleFavourite: [] }>()
+</script>
+<template>
+  <button @click="emit('react', props.reaction === 'LIKE' ? 'NONE' : 'LIKE')">👍</button>
+  <button @click="emit('toggleFavourite')">♥</button>
+</template>
+
+<!-- MusicItemDetailView.vue (parent) -->
+<ReactionControls
+  :reaction="entry.reaction"
+  :favourite="entry.favourite"
+  @react="collection.setReaction(item.id, $event)"
+  @toggle-favourite="collection.toggleFavourite(item.id)"
+/>
+```
+
+`ReactionControls` knows nothing about stores or the backend. It is used on two pages
+and tested with nothing but props and emitted events.
+
+**`v-model` on components** is syntactic sugar for a prop plus an event. Since Vue 3.4,
+`defineModel()` declares both at once:
+
+```vue
+<!-- StarRating.vue -->
+<script setup lang="ts">
+const stars = defineModel<number | null>()   // prop "modelValue" + event "update:modelValue"
+function select(n: number) { stars.value = n } // assigning emits the event
+</script>
+
+<!-- parent -->
+<StarRating v-model="myRating" />
+<!-- is the same as -->
+<StarRating :model-value="myRating" @update:model-value="myRating = $event" />
+```
+
+A component can have several named models: `PaginationNav` uses
+`defineModel('page')`, and the parent writes `v-model:page="currentPage"`. In the
+catalogue, `currentPage` is a writable `computed` whose setter writes the page into the
+URL. `RatingPanel` uses the expanded form on purpose: it shows `myStars` and calls
+`rate()` on `@update:model-value` instead of assigning.
+
+**Slots** let the parent pass *template content* into a child. A **scoped slot** passes
+data back from the child to that content:
+
+```vue
+<!-- MusicItemCard.vue -->
+<div v-if="$slots.actions" class="mt-auto">
+  <slot name="actions" :item="item" />
+</div>
+
+<!-- CatalogueView.vue -->
+<MusicItemCard :item="item">
+  <template #actions="{ item: cardItem }">
+    <CollectionButton :music-item-id="cardItem.id" />
+  </template>
+</MusicItemCard>
+```
+
+The card does not need to know which buttons a page wants.
+
+**Template refs and `defineExpose`**: a `<script setup>` component is closed by default.
+`defineExpose` publishes selected members, which the parent reaches through a template
+ref:
+
+```ts
+// MusicItemForm.vue
+defineExpose({ isDirty, markSaved })
+
+// MusicItemEditView.vue
+const formRef = useTemplateRef<InstanceType<typeof MusicItemForm>>('form') // <MusicItemForm ref="form" />
+onBeforeRouteLeave(() => {
+  if (formRef.value?.isDirty && !confirm('Discard your unsaved changes?')) return false
+})
+```
+
+**Stores** connect components that are far apart in the tree (section 3). Our
+components are of two kinds:
+
+- **presentational** (props/events only): `ReactionControls`, `StarRating`,
+  `MusicItemCard`, `PaginationNav`, `MusicItemForm`
+- **container** (use stores/services): views, `CollectionButton`, `RatingPanel`,
+  `CommentSection`
+
+### Template syntax used
+
+| Syntax | Example | Meaning |
+| --- | --- | --- |
+| `{{ }}` | `{{ item.title }}` | text, **HTML-escaped** (comments can't inject markup) |
+| `:attr` (`v-bind`) | `:href="item.externalUrl"` | bind an attribute or prop |
+| `@event` (`v-on`) | `@click="toggle"` | event listener |
+| modifiers | `@submit.prevent`, `v-model.number` | `preventDefault()`; convert input to a number |
+| `v-if` / `v-else-if` / `v-else` | error → loading → empty → data | conditional rendering (element not created) |
+| `v-for` + `:key` | `v-for="item in result.data" :key="item.id"` | lists; the key lets Vue reuse the right DOM elements |
+| `v-model` | `v-model="form.title"`, on radios and textareas | two-way binding |
+| `<template>` | `<template v-if="item.type !== 'TRACK'">` | group without an extra element |
+| `<TransitionGroup>` | My collection list | CSS classes while items enter/leave |
+
+### Reactivity in components
+
+```ts
+const form = reactive<MusicItemFormState>({ ... })  // object, v-model on its properties
+const searchInput = ref('')                          // single value, .value in script
+const visible = computed(() => collection.entries.filter(matches))  // cached, derived
+watch(() => props.id, (id) => run(id), { immediate: true })          // side effect on change
+```
+
+`computed` recalculates only when one of its **reactive** sources changes. A plain
+variable is invisible to it (the `pristine` bug in step 7).
+
+### Life cycle
+
+```
+setup (<script setup> runs)
+  │   props are available, reactive state is created, watchers are registered
+  ▼
+onBeforeMount → render → onMounted          the DOM exists
+  │
+  ├─ reactive data changes → onBeforeUpdate → re-render → onUpdated   (repeats)
+  ▼
+onBeforeUnmount → onUnmounted               cleanup: timers, listeners, subscriptions
+```
+
+| Hook | Our use |
+| --- | --- |
+| `<script setup>` itself | create state, register `watch`es, call `useAsync` |
+| `onMounted` | `App.vue`: load users, then the collection, once the app shell exists |
+| `onBeforeUnmount` | `CatalogueView`: clear the pending search debounce timer, so it doesn't fire after leaving the page |
+| `watch(..., { immediate: true })` | load data now **and** when a prop changes |
+| `onBeforeRouteLeave` (Vue Router) | `MusicItemEditView`: warn about unsaved changes |
+
+**Why `watch` + `immediate` instead of `onMounted` for loading?** When only a parameter
+changes (`/catalogue/6` → `/catalogue/7`, or `?page=1` → `?page=2`), Vue Router **reuses**
+the component instance and only updates its props. `onMounted` would not run again and
+the page would keep showing the old item. A watcher on the prop covers the first load
+and every change:
+
+```ts
+const props = defineProps<{ id: number }>()
+const { data: item, loading, error, run } = useAsync(musicItemsService.get)
+watch(() => props.id, (id) => run(id), { immediate: true })
+```
+
+Watchers and computeds created during `setup` are stopped automatically when the
+component unmounts. Only things Vue doesn't know about (timers, global listeners) need
+manual cleanup.
+
+### Four states of every data view
+
+Every page that loads data handles the same four states, in this order:
+
+```vue
+<ErrorAlert v-if="error" :error="error" retryable @retry="load" />
+<LoadingSpinner v-else-if="loading && !result" />
+<p v-else-if="result.data.length === 0">No music items match your filters.</p>
+<template v-else> … the data … </template>
+```
+
+During a *reload* (`loading && result`), the old data stays visible and is dimmed
+instead of being replaced by a spinner, so the layout doesn't jump.
+
+### Testing components
+
+```ts
+// presentational: props in, events out
+const wrapper = mount(ReactionControls, { props: { reaction: 'DISLIKE', favourite: false } })
+await wrapper.get('button[title="Dislike"]').trigger('click')
+expect(wrapper.emitted('react')).toEqual([['NONE']])
+
+// integration: real router + Pinia, mocked service
+vi.mock('@/services/music-items.service')
+const router = createAppRouter(createMemoryHistory())
+await router.push('/catalogue?type=ALBUM&search=road&page=2')
+mount(RouterView, { global: { plugins: [router, pinia] } })
+await flushPromises()
+expect(musicItemsService.list).toHaveBeenCalledWith({ search: 'road', type: 'ALBUM', page: 2, limit: 12 })
+```
 
 ## 3. State Management
 
