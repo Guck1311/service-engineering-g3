@@ -1,10 +1,52 @@
-import { describe, it, expect } from 'vitest'
-import { createMemoryHistory, createRouter } from 'vue-router'
-import { routes } from '@/router'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory } from 'vue-router'
+import { createAppRouter } from '@/router'
+import { usersService } from '@/services/users.service'
+import { useSessionStore } from '@/stores/session'
 
+vi.mock('@/services/users.service') // automock: every function becomes a vi.fn()
+
+/** The app's real router (routes + guards), with an in-memory history. */
 function makeRouter() {
-  return createRouter({ history: createMemoryHistory(), routes })
+  return createAppRouter(createMemoryHistory())
 }
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  vi.clearAllMocks()
+  vi.mocked(usersService.list).mockResolvedValue([
+    { id: 1, name: 'Admin', role: 'ADMIN' },
+    { id: 2, name: 'Anna', role: 'USER' },
+  ])
+})
+
+describe('admin guard', () => {
+  it('redirects a normal user from admin pages to the catalogue', async () => {
+    const router = makeRouter()
+    await router.push('/catalogue/6/edit')
+
+    expect(router.currentRoute.value.name).toBe('catalogue')
+    expect(router.currentRoute.value.query.denied).toBe('/catalogue/6/edit')
+  })
+
+  it('lets the admin open admin pages', async () => {
+    useSessionStore().switchUser(1)
+    const router = makeRouter()
+    await router.push('/catalogue/new')
+
+    expect(router.currentRoute.value.name).toBe('item-create')
+  })
+
+  it('does not wait for the users on normal pages', async () => {
+    const router = makeRouter()
+    await router.push('/catalogue/6')
+
+    expect(router.currentRoute.value.name).toBe('item-detail')
+    expect(usersService.list).not.toHaveBeenCalled()
+  })
+})
 
 describe('route table', () => {
   it('redirects / to the catalogue', async () => {

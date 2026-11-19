@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, useRouter } from 'vue-router'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
 
 // The router passes the path parameter as a prop (see `props: idProp` in the
 // route table). The view does not need to know how the URL looks.
@@ -23,6 +26,7 @@ function goBack() {
     <p class="text-body-secondary">Metadata, comments and ratings follow in step 7.</p>
 
     <RouterLink
+      v-if="session.isAdmin"
       :to="{ name: 'item-edit', params: { id: props.id } }"
       class="btn btn-outline-primary btn-sm"
     >

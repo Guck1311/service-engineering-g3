@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+const route = useRoute()
 
 // Placeholder data; loaded from the backend in step 7.
 const items = [
@@ -13,10 +17,22 @@ const items = [
   <section>
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h1 class="h3 mb-0"><i class="bi bi-music-note-list text-primary me-2"></i>Catalogue</h1>
-      <!-- Navigation by route NAME: the path can change without touching this link. -->
-      <RouterLink :to="{ name: 'item-create' }" class="btn btn-primary btn-sm">
+      <!-- Navigation by route NAME: the path can change without touching this link.
+           v-if: only rendered for the admin (the router guard protects the page itself). -->
+      <RouterLink
+        v-if="session.isAdmin"
+        :to="{ name: 'item-create' }"
+        class="btn btn-primary btn-sm"
+      >
         <i class="bi bi-plus-lg me-1"></i>New item
       </RouterLink>
+    </div>
+
+    <!-- Set by the admin guard when it redirected here (toasts follow in step 8). -->
+    <div v-if="route.query.denied" class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-lock me-1"></i>
+      Only the admin can open <code>{{ route.query.denied }}</code
+      >. Switch the user in the navbar.
     </div>
 
     <div class="row g-3">

@@ -1,8 +1,33 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { routes } from '@/router'
+import { collectionsService } from '@/services/collections.service'
+import { usersService } from '@/services/users.service'
+import { useCollectionStore } from '@/stores/collection'
+import { useSessionStore } from '@/stores/session'
 import AppNavbar from '../AppNavbar.vue'
+
+vi.mock('@/services/users.service') // automock: every function becomes a vi.fn()
+vi.mock('@/services/collections.service')
+
+let pinia: Pinia
+
+beforeEach(() => {
+  pinia = createPinia()
+  setActivePinia(pinia)
+  localStorage.clear()
+  vi.clearAllMocks()
+  vi.mocked(usersService.list).mockResolvedValue([
+    { id: 1, name: 'Admin', role: 'ADMIN' },
+    { id: 2, name: 'Anna', role: 'USER' },
+  ])
+  vi.mocked(collectionsService.listOfUser).mockResolvedValue({
+    data: [],
+    meta: { page: 1, limit: 100, total: 0 },
+  })
+})
 
 /** Mounts the navbar with our real route table, starting at `path`. */
 async function mountNavbarAt(path: string) {
@@ -10,7 +35,7 @@ async function mountNavbarAt(path: string) {
   const router = createRouter({ history: createMemoryHistory(), routes })
   await router.push(path)
   await router.isReady()
-  return mount(AppNavbar, { global: { plugins: [router] } })
+  return mount(AppNavbar, { global: { plugins: [router, pinia] } })
 }
 
 function activeLinks(wrapper: Awaited<ReturnType<typeof mountNavbarAt>>) {
@@ -34,6 +59,32 @@ describe('AppNavbar', () => {
     // /collection must not match /collections and vice versa
     expect(activeLinks(await mountNavbarAt('/collection'))).toEqual(['My collection'])
     expect(activeLinks(await mountNavbarAt('/collections?userId=2'))).toEqual(['All collections'])
+  })
+
+  it('shows the collection size from the store as a badge', async () => {
+    const wrapper = await mountNavbarAt('/catalogue')
+    expect(wrapper.find('.nav-link .badge').exists()).toBe(false) // empty collection
+
+    // Any component changing the store updates the navbar.
+    useCollectionStore().entries.push({} as never, {} as never)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('.nav-link .badge').text()).toBe('2')
+  })
+
+  it('switches the user via the session store', async () => {
+    await useSessionStore().ensureLoaded()
+    const wrapper = await mountNavbarAt('/catalogue')
+    const select = wrapper.get<HTMLSelectElement>('#user-switcher')
+
+    expect(select.findAll('option').map((o) => o.text())).toEqual(['Admin (admin)', 'Anna'])
+    expect(select.element.value).toBe('2')
+    expect(wrapper.text()).not.toContain('ADMIN')
+
+    await select.setValue('1')
+
+    expect(useSessionStore().currentUserId).toBe(1)
+    expect(wrapper.get('.badge.text-bg-warning').text()).toBe('ADMIN')
   })
 
   it('toggles the mobile menu via reactive state', async () => {

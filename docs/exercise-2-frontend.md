@@ -350,6 +350,61 @@ state is now returned as `computed(() => data.value)`, a computed without a sett
   The backend enforces the business rules. The frontend only has to show its messages
   (step 8).
 
+## Step 6 - Pinia Stores, User Switcher and Admin Guard
+
+### Files
+
+```
+src/
+├── stores/
+│   ├── session.ts                  # users, current user (remembered), isAdmin
+│   ├── collection.ts               # current user's collection, optimistic updates
+│   └── __tests__/                  # session.spec.ts, collection.spec.ts
+├── components/
+│   ├── UserSwitcher.vue            # <select> in the navbar, bound to the session store
+│   └── AppNavbar.vue               # + collection count badge, + UserSwitcher
+├── router/index.ts                 # createAppRouter(history) factory + admin beforeEach guard
+├── App.vue                         # onMounted: load users, then the collection
+└── views/                          # "New item" / "Edit" only for the admin,
+                                    # notice when the guard redirected, real user list
+```
+
+### Behaviour
+
+- On the first visit, the app acts as **Anna** (user 2). The choice in the navbar is
+  stored in `localStorage` and restored after a reload. If the stored user no longer
+  exists (database reset → 401), the store falls back to Anna.
+- Switching the user reloads the collection, updates the badge and shows or hides the
+  admin buttons. No page reload is needed.
+- Opening `/catalogue/new` or `/catalogue/:id/edit` as a normal user redirects to the
+  catalogue with a notice. The backend checks the role again (403), so the guard is
+  only for usability, not security.
+
+### Problems
+
+- **Test isolation**: Vitest keeps the call history of mocks between tests, so "was not
+  called" failed in the router test. Fix: `vi.clearAllMocks()` in `beforeEach`.
+- **Lint rule `vitest/require-mock-type-parameters`** for `vi.fn()` inside `vi.mock`
+  factories. Fix: `vi.mock('@/services/users.service')` without a factory, so Vitest
+  **automocks** the module and every function becomes a typed `vi.fn()`.
+- **CORS**: the browser now sends the custom header `X-User-Id`, which triggers a
+  preflight `OPTIONS` request. Checked: the backend (`app.enableCors()`) answers with
+  `Access-Control-Allow-Headers: x-user-id,content-type` and all methods.
+
+### Result
+
+`npm run test:unit`: 64 tests. New ones cover:
+
+- **Session store**: default user, `isAdmin` getter, persistence over a simulated reload,
+  users loaded only once, fallback after a 401, retry after a network error, and that
+  requests carry `X-User-Id` of the selected user.
+- **Collection store**: loading, add/remove, the optimistic update (visible before the
+  backend answers), rollback after an error, the dislike/favourite rule, and reloading
+  after a user switch.
+- **Admin guard**: redirect for Anna, access for the admin, no waiting on normal pages.
+- **Navbar**: badge follows the store, the switcher changes the user and shows the
+  admin badge.
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -385,7 +440,177 @@ state is now returned as `computed(() => data.value)`, a computed without a sett
 
 ## 3. State Management
 
-*Step 6.*
+*Introduced in step 6.*
+
+### Three kinds of state
+
+| Kind | Lives in | Example | Shared with |
+| --- | --- | --- | --- |
+| **Local state** | `ref()` in a component | navbar menu open, form input | only this component (children via props) |
+| **URL state** | route params / query | `/catalogue/6`, `?userId=2` | everyone; survives reload, bookmarkable |
+| **Global state** | Pinia store | current user, my collection | every component that uses the store |
+
+Local state is the default. State moves to a store only when **several unrelated
+components** need it. In our app, the current user is needed by the navbar, the views,
+the API layer and the router guard, and the collection by the navbar badge, the
+catalogue cards, the detail page and "My collection".
+
+Passing such state down as props through every level ("prop drilling") or sending it up
+with events between siblings quickly becomes unmanageable. A store is a single place
+that all components read from and write to.
+
+### Reactivity is the foundation
+
+A store is not magic: it is reactive state (`ref`, `computed`) that lives **outside** a
+component. Any `ref` defined at module level is already shared state:
+
+```ts
+// works, but no devtools, no SSR safety, hard to test
+export const currentUserId = ref(2)
+```
+
+**Pinia** (the official store library, successor of Vuex) adds structure on top: a
+store per domain, devtools integration (inspect and time-travel state), HMR, plugins,
+and test isolation (a fresh Pinia per test).
+
+### Defining a store (setup syntax)
+
+Setup stores use the same Composition API as components: `ref` = state,
+`computed` = getters, functions = actions.
+
+```ts
+// stores/session.ts
+export const useSessionStore = defineStore('session', () => {
+  // state
+  const users = ref<User[]>([])
+  const currentUserId = ref(readStoredUserId() ?? DEFAULT_USER_ID)
+
+  // getters
+  const currentUser = computed(() => users.value.find((u) => u.id === currentUserId.value) ?? null)
+  const isAdmin = computed(() => currentUser.value?.role === 'ADMIN')
+
+  // side effects: connect the API layer, persist the choice
+  setUserIdProvider(() => currentUserId.value)
+  watch(currentUserId, storeUserId)
+
+  // actions
+  async function loadUsers() { users.value = await usersService.list() }
+  function switchUser(id: number) { currentUserId.value = id }
+
+  return { users, currentUserId, currentUser, isAdmin, loadUsers, switchUser }
+})
+```
+
+Pinia also supports an **options syntax** (`state`, `getters`, `actions` objects),
+similar to Vuex and the Options API. We use setup stores for consistency with
+`<script setup>`.
+
+The store is created lazily on the first `useSessionStore()` call and then exists
+**once for the whole app**. Every component calling it gets the same instance. (A
+composable like `useAsync`, by contrast, creates new state on every call.)
+
+### Using a store in components
+
+```vue
+<script setup lang="ts">
+const session = useSessionStore()
+// destructuring would lose reactivity -> storeToRefs keeps state and getters as refs
+const { users, currentUserId, isAdmin } = storeToRefs(session)
+</script>
+
+<template>
+  <select :value="currentUserId" @change="session.switchUser(Number(($event.target as HTMLSelectElement).value))">
+    <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+  </select>
+  <RouterLink v-if="session.isAdmin" :to="{ name: 'item-create' }">New item</RouterLink>
+</template>
+```
+
+When `currentUserId` changes, **every** component that read it re-renders: the
+switcher, the admin buttons in the views, the navbar badge (through the collection
+store, which reloads).
+
+### Stores using stores, and watchers inside stores
+
+```ts
+// stores/collection.ts
+export const useCollectionStore = defineStore('collection', () => {
+  const session = useSessionStore()          // a store may use other stores
+  const entries = ref<CollectionEntry[]>([])
+  const count = computed(() => entries.value.length)
+
+  watch(() => session.currentUserId, () => {  // another user: reload the collection
+    entries.value = []
+    void load()
+  })
+  // ...
+})
+```
+
+### Stores outside of components
+
+Stores can be used anywhere after `app.use(createPinia())`, e.g. in the router guard.
+The call must happen **inside** the guard, not at module level, where Pinia is not
+installed yet:
+
+```ts
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAdmin) return true
+  const session = useSessionStore()
+  await session.ensureLoaded()   // on a direct page load the users may not be loaded yet
+  return session.isAdmin ? true : { name: 'catalogue', query: { denied: to.fullPath } }
+})
+```
+
+The API layer does **not** import the store. Instead, the store registers a provider
+function (`setUserIdProvider`), so the dependency points from the UI state to the API
+layer and the API layer stays independent of Vue.
+
+### Optimistic updates
+
+When the user clicks "like", waiting for the server makes the UI feel slow. The
+collection store shows the change **immediately** and corrects it if the server
+disagrees:
+
+```ts
+async function update(musicItemId: number, changes: UpdateCollectionEntry) {
+  const previous = entryFor(musicItemId)!
+  replaceEntry({ ...previous, ...changes })          // 1. show at once
+  try {
+    replaceEntry(await collectionsService.update(session.currentUserId, musicItemId, changes)) // 2. take the server's version
+  } catch (e) {
+    replaceEntry(previous)                           // 3. roll back
+    throw ApiError.from(e)                           //    and let the UI show the error
+  }
+}
+```
+
+The store also enforces the backend rule "a disliked item cannot be a favourite" before
+sending (disliking removes the favourite flag), so the user never runs into the 400.
+
+### Immutable updates
+
+The store replaces arrays and objects instead of mutating them
+(`entries.value = entries.value.map(...)`). Vue would also detect in-place mutations of
+a `ref` array, but replacing makes the change explicit, keeps the previous object intact
+for the rollback, and works with `shallowRef` too.
+
+### Testing stores
+
+```ts
+vi.mock('@/services/collections.service')       // automock: all service functions become vi.fn()
+
+beforeEach(() => setActivePinia(createPinia()))  // fresh state for every test
+
+it('rolls back an optimistic update the backend rejects', async () => {
+  const collection = useCollectionStore()
+  await collection.load()
+  vi.mocked(collectionsService.update).mockRejectedValue(new ApiError('Server error', 'http', 500))
+
+  await expect(collection.toggleFavourite(4)).rejects.toMatchObject({ status: 500 })
+  expect(collection.entryFor(4)?.favourite).toBe(false)
+})
+```
 
 ## 4. Styling of UI Elements
 

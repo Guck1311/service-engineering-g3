@@ -1,4 +1,5 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory } from 'vue-router'
+import { useSessionStore } from '@/stores/session'
 import CatalogueView from '@/views/CatalogueView.vue'
 
 // Typed route meta fields: TypeScript now knows `to.meta.title` and `to.meta.requiresAdmin`.
@@ -74,21 +75,39 @@ export const routes: RouteRecordRaw[] = [
   },
 ]
 
-const router = createRouter({
-  // HTML5 history mode: real paths like /catalogue/3 instead of /#/catalogue/3.
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
-  // Back/forward restores the old scroll position; new pages start at the top.
-  scrollBehavior(_to, _from, savedPosition) {
-    return savedPosition ?? { top: 0 }
-  },
-})
+/**
+ * Creates the router with all routes and guards. A factory, so that tests can
+ * create the same router with an in-memory history.
+ */
+export function createAppRouter(history: RouterHistory) {
+  const router = createRouter({
+    history,
+    routes,
+    // Back/forward restores the old scroll position; new pages start at the top.
+    scrollBehavior(_to, _from, savedPosition) {
+      return savedPosition ?? { top: 0 }
+    },
+  })
 
-// Global after-hook: runs after every successful navigation.
-router.afterEach((to) => {
-  document.title = to.meta.title
-    ? `${to.meta.title} · Music Collection Manager`
-    : 'Music Collection Manager'
-})
+  // Global before-guard: runs before every navigation and may cancel or redirect it.
+  router.beforeEach(async (to) => {
+    if (!to.meta.requiresAdmin) return true
+    // The store is used inside the guard (not at module level): by then Pinia is installed.
+    const session = useSessionStore()
+    await session.ensureLoaded() // on a direct page load the user list may not be there yet
+    if (session.isAdmin) return true
+    return { name: 'catalogue', query: { denied: to.fullPath } } // redirect
+  })
 
-export default router
+  // Global after-hook: runs after every successful navigation.
+  router.afterEach((to) => {
+    document.title = to.meta.title
+      ? `${to.meta.title} · Music Collection Manager`
+      : 'Music Collection Manager'
+  })
+
+  return router
+}
+
+// HTML5 history mode: real paths like /catalogue/3 instead of /#/catalogue/3.
+export default createAppRouter(createWebHistory(import.meta.env.BASE_URL))

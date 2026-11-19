@@ -1,6 +1,19 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AppNavbar from '@/components/AppNavbar.vue'
+import { useCollectionStore } from '@/stores/collection'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+const collection = useCollectionStore()
+
+// Lifecycle hook: runs once after the app shell is in the DOM.
+// Users first (needed to know who we are), then that user's collection.
+onMounted(async () => {
+  await session.ensureLoaded()
+  await collection.load()
+})
 </script>
 
 <template>

@@ -1,19 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useCollectionStore } from '@/stores/collection'
+import UserSwitcher from './UserSwitcher.vue'
 
 /** One entry in the main navigation. */
 interface NavItem {
   to: string
   label: string
   icon: string // Bootstrap icon name, e.g. "music-note-list"
+  badge?: number
 }
 
-const navItems: NavItem[] = [
+const collection = useCollectionStore()
+
+// computed: the badge follows the store. When any component adds an item to the
+// collection, the count in the navbar updates without the components knowing each other.
+const navItems = computed<NavItem[]>(() => [
   { to: '/catalogue', label: 'Catalogue', icon: 'music-note-list' },
-  { to: '/collection', label: 'My collection', icon: 'collection' },
+  { to: '/collection', label: 'My collection', icon: 'collection', badge: collection.count },
   { to: '/collections', label: 'All collections', icon: 'people' },
-]
+])
 
 // The current route, reactive: re-evaluated on every navigation.
 const route = useRoute()
@@ -72,9 +79,13 @@ function closeMenu() {
             >
               <i :class="['bi', `bi-${item.icon}`, 'me-1']" aria-hidden="true"></i>
               {{ item.label }}
+              <span v-if="item.badge" class="badge rounded-pill text-bg-light ms-1">
+                {{ item.badge }}
+              </span>
             </RouterLink>
           </li>
         </ul>
+        <UserSwitcher class="py-2 py-md-0" />
       </div>
     </div>
   </nav>
