@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useAsync } from '@/composables/useAsync'
 import { ratingsService } from '@/services/ratings.service'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useSessionStore } from '@/stores/session'
 import ErrorAlert from './ErrorAlert.vue'
 import StarRating from './StarRating.vue'
@@ -12,6 +13,7 @@ const props = defineProps<{ musicItemId: number }>()
 const emit = defineEmits<{ rated: [] }>()
 
 const session = useSessionStore()
+const notifications = useNotificationsStore()
 const { data: summary, error, run } = useAsync(ratingsService.summary)
 
 // Load now and again when the parent shows another item.
@@ -35,6 +37,7 @@ async function rate(stars: number | null) {
     await ratingsService.rate(props.musicItemId, session.currentUserId, stars)
     await run(props.musicItemId)
     emit('rated')
+    notifications.success(`You rated this item ${stars} star${stars === 1 ? '' : 's'}.`)
   } finally {
     saving.value = false
   }

@@ -508,6 +508,62 @@ with a fake whose "OS setting" the test can change: default *auto* follows the s
 an explicit choice overrides it, cycle order, persistence over a reload, fallback
 without `matchMedia`.
 
+## Step 8 - Error Handling
+
+### Files
+
+```
+src/
+├── plugins/error-handling.ts       # Vue plugin: app.config.errorHandler, router.onError, unhandledrejection
+├── stores/notifications.ts         # toasts: success/info/warning/error, auto-dismiss, no duplicates
+├── components/
+│   ├── ToastHost.vue               # renders the toasts (bottom right)
+│   ├── ErrorBoundary.vue           # onErrorCaptured around <RouterView>: fallback instead of a blank page
+│   ├── ConnectionBanner.vue        # "offline" / "backend unreachable" + Retry
+│   └── NotFoundState.vue           # shared 404 display (unknown route, deleted item)
+├── composables/useOnlineStatus.ts  # navigator.onLine as a ref, listeners removed on unmount
+├── main.ts                         # app.use(errorHandling, { router })
+└── App.vue                         # ConnectionBanner, ErrorBoundary, ToastHost
+```
+
+Success toasts were added for add/remove (collection), comment posted, rating saved,
+item created/saved/deleted. A detail or edit page for a missing item (404) now shows
+"Music item not found" instead of a red error box.
+
+### Problems
+
+- **Error boundary stayed (almost) empty.** My first guess was that Vue ignores state
+  changes a component makes during its own render, so I wrapped the assignment in
+  `nextTick`. That did not help, and **the guess was wrong**. Debugging showed two
+  actual causes:
+  1. The test router had no route named `catalogue`, which the fallback's
+     `<RouterLink>` needs. Fix in the test.
+  2. **Key collision**: `v-if` / `v-else` branches get the automatic keys `0` and `1`.
+     The content branch had `:key="renderKey"`, which is also `0` at first. Vue therefore
+     treated the fallback `<div>` and the content `<div>` as the **same** element and
+     patched one into the other, leaving only the link. Fix: distinct explicit keys
+     (`key="crash"`, `` :key="`content-${renderKey}`" ``). The boundary works without
+     `nextTick`, which was removed again.
+- A `perl` substitution meant to insert a line matched at position 0 of a file, because
+  `\|` inside a `s|...|...|` expression is an empty alternative, not a literal `||`.
+  Spotted in the output and fixed by hand.
+
+### Result
+
+- `npm run test:unit`: 102 tests. New: notifications store (fake timers for
+  auto-dismiss, details, canceled requests, duplicates, limit), toast rendering, global
+  handler (async click handler without try/catch → toast; bugs → generic message +
+  console), `router.onError` for a chunk that cannot be downloaded, error boundary
+  (fallback, "Try again", API errors pass through to the toast).
+- Checked once in the complete app against the running backend:
+
+  | Situation | Result |
+  | --- | --- |
+  | open `/catalogue/999` | "Music item not found … It may have been deleted." |
+  | click "Add" while the backend already has the item (real 409) | error toast "Music item 6 is already in the collection" |
+  | add "Come Together" | success toast "Added "Come Together" to your collection." |
+  | backend unreachable, open the catalogue | "The server cannot be reached. Is the backend running?" + Retry |
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -1464,4 +1520,155 @@ expect(error).toMatchObject({ kind: 'http', status: 404, message: 'Music item 99
 
 ## 8. Error Handling
 
-*Step 8.*
+*Introduced in steps 4 and 5 (API errors, `useAsync`), completed in step 8.*
+
+Errors are handled in **layers**. Each layer handles what it can and passes the rest on:
+
+```
+backend error JSON / network failure
+   │  axios response interceptor → ApiError (readable message, kind, status, details)   section 7
+   ▼
+service ─▶ store / composable
+   │  useAsync: error becomes state ──▶ <ErrorAlert> with Retry in the page (loading data)
+   │  store action: rethrows (optimistic update rolled back first)
+   ▼
+component event handler (no try/catch)
+   │  rejected promise
+   ▼
+<ErrorBoundary> onErrorCaptured      bug while rendering → fallback page; ApiError → pass on
+   ▼
+app.config.errorHandler              → toast (ApiError message, or generic text for bugs)
+```
+
+Plus three handlers outside this chain: `router.onError` (page chunk could not be
+loaded), `window` `unhandledrejection` (promises outside Vue), and banners for
+"offline" / "backend unreachable".
+
+### Which error goes where
+
+| Situation | Example | Shown as |
+| --- | --- | --- |
+| Loading a page's data fails | catalogue while the backend is down | inline `ErrorAlert` + **Retry** |
+| Resource does not exist | `/catalogue/999` | `NotFoundState` page |
+| Form rejected | invalid input, 400 with details | `ErrorAlert` above the form, details as list |
+| An action fails | add (409), like (500), delete as Anna (403) | **toast** |
+| Bug while rendering | `undefined.title` in a template | **error boundary** fallback with "Try again" |
+| Page chunk missing after a deploy | `Failed to fetch dynamically imported module` | toast: "please reload" |
+| No network / backend asleep | `navigator.onLine`, users not loadable | **banner** under the navbar |
+
+### Vue's global error handler
+
+```ts
+// plugins/error-handling.ts (a Vue plugin, installed with app.use(errorHandling, { router }))
+app.config.errorHandler = (error, instance, info) => {
+  if (!(error instanceof ApiError)) console.error(`[vue: ${info}]`, error) // bugs: full log
+  useNotificationsStore().error(error)                                    // user: toast
+}
+```
+
+Vue calls it for errors in **event handlers, lifecycle hooks, watchers, setup and
+render functions**. It also catches **rejected promises returned from event
+handlers**. So components need no `try/catch` for actions:
+
+```ts
+// CollectionButton.vue
+async function toggle() {
+  busy.value = true
+  try {
+    await collection.add(props.musicItemId)             // may reject with ApiError(409)
+    notifications.success(`Added "${title}" to your collection.`)
+  } finally {
+    busy.value = false                                   // always reset the button
+  }                                                      // no catch: the global handler shows the error
+}
+```
+
+`describeError()` decides what the user sees: an `ApiError` already has a readable
+message ("Requires role ADMIN"). Anything else is a bug in the frontend, and its
+technical message ("Cannot read properties of undefined") is replaced by "Something
+went wrong. Please try again." and logged to the console in full.
+
+### Error boundaries with `onErrorCaptured`
+
+`onErrorCaptured` is a lifecycle hook that receives errors from **all descendant
+components**. Returning `false` stops propagation. `ErrorBoundary` wraps
+`<RouterView>`, so a crashing page shows a fallback while navbar and footer keep
+working:
+
+```vue
+<script setup lang="ts">
+const crash = shallowRef<unknown>(null)
+const renderKey = ref(0)
+
+onErrorCaptured((error, _instance, info) => {
+  if (error instanceof ApiError) return true     // expected → continue to the toast handler
+  console.error(`[ErrorBoundary] ${info}`, error)
+  crash.value = error
+  return false                                   // handled here
+})
+
+function retry() { crash.value = null; renderKey.value++ }  // new key → children are re-created
+</script>
+
+<template>
+  <div v-if="crash" key="crash"> … This page ran into a problem · Try again … </div>
+  <div v-else :key="`content-${renderKey}`"><slot /></div>
+</template>
+```
+
+Changing a `key` makes Vue destroy and re-create the element and its components, which
+is a simple "restart" for the page. The keys of the two branches must differ (see the
+step 8 problems).
+
+### Router errors
+
+```ts
+router.onError((error) => {
+  if (/dynamically imported module/i.test(error.message)) notifications.warning('… Please reload the page.')
+})
+```
+
+Lazy-loaded pages are separate files with a content hash in their name
+(`MusicItemDetailView-F9KeJ2m2.js`). After a new deployment, a browser tab still running
+the old version asks for file names that no longer exist. The router reports this
+through `onError`.
+
+### Toasts as a store
+
+Toasts are global state: any component, the global handler or a store may add one, and
+one `ToastHost` in `App.vue` shows them. The notifications store gives every toast an id
+and a timer (errors stay 8 s, successes 3 s), drops identical messages that are already
+visible (several failing requests → one toast), and keeps at most four. `ToastHost`
+uses Bootstrap's toast markup, but Vue decides when a toast exists (`v-for` +
+`<TransitionGroup>`), not Bootstrap's JavaScript. Errors get `role="alert"`, so screen
+readers announce them immediately.
+
+### Connection state
+
+```ts
+// composables/useOnlineStatus.ts
+export function useOnlineStatus() {
+  const online = ref(navigator.onLine)
+  const update = () => (online.value = navigator.onLine)
+  onMounted(() => { window.addEventListener('online', update); window.addEventListener('offline', update) })
+  onUnmounted(() => { window.removeEventListener('online', update); window.removeEventListener('offline', update) })
+  return online
+}
+```
+
+Vue cleans up its own watchers automatically, but not listeners added to `window`.
+Without `onUnmounted`, every component instance that used the composable would leave a
+listener behind. `ConnectionBanner` shows "You are offline" or, if the user list could
+not be loaded at startup, the API error ("The server cannot be reached …", Render may
+need ~30 s to wake up) with a Retry button.
+
+### Summary
+
+- **Expected errors** (network, 4xx/5xx) are converted **once** into `ApiError` and
+  shown with the backend's message, at the place where the user can act on them.
+- **Unexpected errors** (bugs) are logged in full for developers and shown with a
+  neutral text, without breaking the whole page.
+- Components stay free of repetitive `try/catch`. The global handler and the boundary
+  are installed once.
+- The backend still validates and authorizes everything. The frontend checks
+  (form validation, admin guard, dislike/favourite rule) are only for usability.

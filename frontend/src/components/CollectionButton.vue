@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useCollectionStore } from '@/stores/collection'
+import { useNotificationsStore } from '@/stores/notifications'
 
 /**
  * Container component: unlike ReactionControls, it talks to the store itself.
@@ -9,16 +10,24 @@ import { useCollectionStore } from '@/stores/collection'
 const props = defineProps<{ musicItemId: number }>()
 
 const collection = useCollectionStore()
+const notifications = useNotificationsStore()
 const inCollection = computed(() => collection.has(props.musicItemId))
 const busy = ref(false)
 
-// Errors are not caught here: Vue passes errors of event handlers to the
-// app-wide error handler, which shows them (step 8).
+// No catch: if the store throws (e.g. 409, offline), Vue passes the rejected
+// promise of this event handler to app.config.errorHandler, which shows a toast.
+// `finally` still resets the button.
 async function toggle() {
   busy.value = true
   try {
-    if (inCollection.value) await collection.remove(props.musicItemId)
-    else await collection.add(props.musicItemId)
+    if (inCollection.value) {
+      const title = collection.entryFor(props.musicItemId)?.musicItem.title
+      await collection.remove(props.musicItemId)
+      notifications.success(`Removed "${title}" from your collection.`)
+    } else {
+      const entry = await collection.add(props.musicItemId)
+      notifications.success(`Added "${entry.musicItem.title}" to your collection.`)
+    }
   } finally {
     busy.value = false
   }

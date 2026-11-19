@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { Comment } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
 import { commentsService } from '@/services/comments.service'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime } from '@/utils/format'
 import ErrorAlert from './ErrorAlert.vue'
@@ -13,6 +14,7 @@ const PAGE_SIZE = 10
 const MAX_LENGTH = 2000 // same limit as the backend's CreateCommentDto
 
 const session = useSessionStore()
+const notifications = useNotificationsStore()
 
 const comments = ref<Comment[]>([])
 const total = ref(0)
@@ -53,6 +55,7 @@ async function submit() {
     comments.value = [comment, ...comments.value] // newest first, like the API
     total.value++
     text.value = ''
+    notifications.success('Comment posted.')
   } finally {
     posting.value = false
   }

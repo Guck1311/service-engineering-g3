@@ -6,11 +6,13 @@ import CommentSection from '@/components/CommentSection.vue'
 import ErrorAlert from '@/components/ErrorAlert.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
 import MusicTypeBadge from '@/components/MusicTypeBadge.vue'
+import NotFoundState from '@/components/NotFoundState.vue'
 import RatingPanel from '@/components/RatingPanel.vue'
 import ReactionControls from '@/components/ReactionControls.vue'
 import { useAsync } from '@/composables/useAsync'
 import { musicItemsService } from '@/services/music-items.service'
 import { useCollectionStore } from '@/stores/collection'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useSessionStore } from '@/stores/session'
 import { formatDate, formatDuration } from '@/utils/format'
 
@@ -20,6 +22,7 @@ const props = defineProps<{ id: number }>()
 const router = useRouter()
 const session = useSessionStore()
 const collection = useCollectionStore()
+const notifications = useNotificationsStore()
 
 const { data: item, loading, error, run } = useAsync(musicItemsService.get)
 
@@ -38,12 +41,14 @@ const entry = computed(() => collection.entryFor(props.id))
 const deleting = ref(false)
 
 async function remove() {
-  if (!item.value || !confirm(`Delete "${item.value.title}" from the catalogue?`)) return
+  const title = item.value?.title
+  if (!title || !confirm(`Delete "${title}" from the catalogue?`)) return
   deleting.value = true
   try {
     await musicItemsService.remove(props.id)
     await collection.load() // the item disappears from all collections
     await router.replace({ name: 'catalogue' })
+    notifications.success(`"${title}" was deleted.`)
   } finally {
     deleting.value = false
   }
@@ -56,7 +61,11 @@ async function remove() {
       <i class="bi bi-arrow-left me-1"></i>Back
     </button>
 
-    <ErrorAlert v-if="error" :error="error" :retryable="!error.isNotFound" @retry="run(id)" />
+    <!-- 404: the item does not exist (anymore), e.g. an old link or deleted by the admin -->
+    <NotFoundState v-if="error?.isNotFound" title="Music item not found">
+      There is no music item #{{ id }}. It may have been deleted.
+    </NotFoundState>
+    <ErrorAlert v-else-if="error" :error="error" retryable @retry="run(id)" />
     <LoadingSpinner v-else-if="loading && !item" label="Loading music item…" />
 
     <template v-else-if="item">

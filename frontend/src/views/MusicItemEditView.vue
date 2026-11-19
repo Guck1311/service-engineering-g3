@@ -6,13 +6,16 @@ import type { CreateMusicItem } from '@/api/types'
 import ErrorAlert from '@/components/ErrorAlert.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
 import MusicItemForm from '@/components/MusicItemForm.vue'
+import NotFoundState from '@/components/NotFoundState.vue'
 import { useAsync } from '@/composables/useAsync'
 import { musicItemsService } from '@/services/music-items.service'
+import { useNotificationsStore } from '@/stores/notifications'
 
 // One view for two routes: /catalogue/new (no id) and /catalogue/:id/edit (with id).
 const props = defineProps<{ id?: number }>()
 
 const router = useRouter()
+const notifications = useNotificationsStore()
 const isEdit = computed(() => props.id !== undefined)
 
 // Editing: load the existing item first.
@@ -40,6 +43,9 @@ async function save(payload: CreateMusicItem) {
         ? await musicItemsService.update(props.id, payload)
         : await musicItemsService.create(payload)
     formRef.value?.markSaved()
+    notifications.success(
+      props.id !== undefined ? 'Changes saved.' : `"${saved.title}" was created.`,
+    )
     // replace: Back on the detail page should not return to the form.
     await router.replace({ name: 'item-detail', params: { id: saved.id } })
   } catch (e) {
@@ -69,7 +75,10 @@ onBeforeRouteLeave(() => {
       {{ isEdit ? 'Edit music item' : 'New music item' }}
     </h1>
 
-    <ErrorAlert v-if="loadError" :error="loadError" retryable @retry="load(id!)" />
+    <NotFoundState v-if="loadError?.isNotFound" title="Music item not found">
+      There is no music item #{{ id }} to edit.
+    </NotFoundState>
+    <ErrorAlert v-else-if="loadError" :error="loadError" retryable @retry="load(id!)" />
     <LoadingSpinner v-else-if="isEdit && loading" />
     <div v-else-if="!isEdit || item" class="card">
       <div class="card-body">
