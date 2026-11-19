@@ -1,0 +1,27 @@
+// Global stylesheet, imported once in main.ts.
+//
+// Order matters:
+//   1. our variables      -> they replace Bootstrap's !default values
+//   2. Bootstrap itself   -> compiled with our theme
+//   3. our global styles  -> may use Bootstrap's variables and mixins
+
+@import 'variables';
+@import 'bootstrap/scss/bootstrap';
+
+// Global app styles
+
+body {
+  min-height: 100vh;
+}
+
+// Cards lift slightly on hover; used for the music item cards later.
+.card-hover {
+  transition:
+    transform 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $box-shadow;
+  }
+}

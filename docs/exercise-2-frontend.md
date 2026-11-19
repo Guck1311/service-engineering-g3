@@ -127,6 +127,62 @@ app.mount('#app')          // 3. render App.vue into <div id="app"> of index.htm
 | `npm run test:unit` | Vitest in watch mode |
 | `npm run lint` / `npm run format` | oxlint + ESLint / Prettier |
 
+## Step 2 - Bootstrap, SCSS Theme and Layout
+
+### Packages
+
+```bash
+npm install bootstrap bootstrap-icons
+npm install -D sass-embedded   # SCSS compiler; Vite picks it up automatically
+```
+
+Only Bootstrap's **SCSS sources and CSS** are used, not its JavaScript bundle.
+Interactive parts (for example the mobile menu) are implemented with Vue state instead;
+see section 4.
+
+### Files
+
+```
+src/
+├── main.ts                    # imports styles/main.scss and the icon font once, globally
+├── App.vue                    # app shell: navbar, <main> with <RouterView>, footer
+├── components/
+│   ├── AppNavbar.vue          # brand, nav links, mobile toggle (scoped SCSS)
+│   └── __tests__/AppNavbar.spec.ts
+├── styles/
+│   ├── _variables.scss        # theme: Bootstrap variable overrides + own variables
+│   └── main.scss              # variables -> Bootstrap -> global app styles
+└── views/HomeView.vue         # temporary theme preview, replaced in step 7
+```
+
+The demo content of `create-vue` (logo, `HelloWorld`, `TheWelcome`, icons, `base.css`,
+counter store, `AboutView`) was removed.
+
+### Sass deprecation warnings
+
+Bootstrap 5.3 is written with Sass `@import`, which current Dart Sass deprecates in
+favour of the module system (`@use`). Since Bootstrap can only be themed via `@import`
+until Bootstrap 6, the build printed 21 warnings. They are silenced in
+`vite.config.ts`:
+
+```ts
+css: {
+  preprocessorOptions: {
+    scss: {
+      quietDeps: true,                 // warnings from inside node_modules
+      silenceDeprecations: ['import'], // our own @import of Bootstrap
+    },
+  },
+},
+```
+
+### Result
+
+- `npm run build`: no warnings. The CSS bundle (all of Bootstrap) is 307 kB, 45 kB
+  gzipped. Importing only the Bootstrap partials we use would make it smaller; not worth
+  it for this project.
+- `npm run test:unit`: 2 tests for the navbar (rendering, mobile toggle).
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -166,7 +222,86 @@ app.mount('#app')          // 3. render App.vue into <div id="app"> of index.htm
 
 ## 4. Styling of UI Elements
 
-*Step 2.*
+*Introduced in step 2.*
+
+Vue itself has no styling system. It offers several ways to attach CSS to components,
+and any CSS framework can be added. We combine **Bootstrap** (layout, components,
+utility classes) with **SCSS** (theme) and Vue's **scoped styles** (component-specific
+styles).
+
+### Three levels of styles
+
+| Level | Where | Applies to | Our use |
+| --- | --- | --- | --- |
+| Global | `src/styles/main.scss`, imported in `main.ts` | whole app | Bootstrap + theme, `.card-hover` |
+| Scoped | `<style scoped>` in a `.vue` file | only this component | gradient brand text in `AppNavbar` |
+| Inline / bound | `class` / `:class` / `:style` in the template | one element | Bootstrap utility classes, `show` toggle |
+
+Vue also supports **CSS Modules** (`<style module>`, accessed as `$style.x`) and
+`v-bind()` inside `<style>` to use reactive values in CSS. We don't need either.
+
+### Theming Bootstrap with SCSS
+
+Every Bootstrap variable is declared with `!default` ("only if not set yet"). Setting
+the variable **before** importing Bootstrap changes every component that uses it:
+
+```scss
+// styles/_variables.scss
+$primary: #6f42c1;        // buttons, links, badges, navbar bg-primary, ...
+$border-radius: 0.5rem;
+$card-border-width: 0;
+
+// styles/main.scss
+@import 'variables';                 // 1. our values
+@import 'bootstrap/scss/bootstrap';  // 2. Bootstrap compiled with them
+.card-hover:hover { box-shadow: $box-shadow; }  // 3. own styles using Bootstrap variables
+```
+
+This is the advantage over loading the precompiled `bootstrap.css`: the theme is applied
+at build time, consistently, without overriding CSS rules afterwards.
+
+### Scoped styles
+
+```vue
+<!-- AppNavbar.vue -->
+<span class="brand-text">Music Collection</span>
+
+<style scoped lang="scss">
+@use '@/styles/variables' as *;   // shared SCSS variables inside a component
+.brand-text { background: $navbar-brand-gradient; background-clip: text; color: transparent; }
+</style>
+```
+
+The SFC compiler adds a unique attribute (e.g. `data-v-7a3f1c`) to every element of the
+component and rewrites the selector to `.brand-text[data-v-7a3f1c]`. The style cannot
+leak into other components, and other components' `.brand-text` classes don't affect
+this one. `lang="scss"` lets each component use SCSS too.
+
+### Class bindings instead of DOM manipulation
+
+Bootstrap's own JavaScript opens the mobile menu by adding the class `show` to the
+element directly. In Vue, the template should be the only thing that changes the DOM,
+so the class is **bound to reactive state** instead:
+
+```vue
+<script setup lang="ts">
+const menuOpen = ref(false)
+</script>
+
+<button class="navbar-toggler" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">…</button>
+<div class="collapse navbar-collapse" :class="{ show: menuOpen }">…</div>
+```
+
+`:class` accepts a string, an array (`['bi', `bi-${item.icon}`]`) or an object
+(`{ show: menuOpen }`: the class is set while the value is truthy). When `menuOpen`
+changes, Vue updates exactly this attribute. Therefore we don't load Bootstrap's
+JavaScript bundle at all.
+
+### Icons
+
+`bootstrap-icons` is an icon *font*: `import 'bootstrap-icons/font/bootstrap-icons.css'`
+once in `main.ts`, then `<i class="bi bi-heart"></i>` anywhere. Vite copies the font
+files into the build and adds a content hash to their file names for caching.
 
 ## 5. Routing and Navigation
 

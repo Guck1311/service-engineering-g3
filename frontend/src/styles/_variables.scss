@@ -1,0 +1,31 @@
+// Theme overrides for Bootstrap.
+//
+// Bootstrap declares every variable with `!default`, which means "use this value
+// unless the variable already has one". Because this file is imported BEFORE
+// Bootstrap (see main.scss), our values win and Bootstrap compiles all its
+// components (buttons, badges, links, ...) with them.
+
+// Colors
+$primary: #6f42c1; // purple as brand color
+$secondary: #6c757d;
+$body-bg: #f6f5fa;
+
+// Typography
+$font-family-sans-serif:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  'Helvetica Neue',
+  Arial,
+  sans-serif;
+
+// Shapes
+$border-radius: 0.5rem;
+$border-radius-lg: 0.75rem;
+$card-border-width: 0;
+$card-box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.06);
+$enable-shadows: true;
+
+// Custom variables of our app (not Bootstrap's)
+$navbar-brand-gradient: linear-gradient(90deg, #ffffff, #d6c8f5);
