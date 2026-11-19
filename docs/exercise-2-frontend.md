@@ -227,6 +227,77 @@ src/
   (including `/catalogue/abc` → 404) and check the admin meta flags. The navbar tests
   mount the navbar with the real route table and check the active link per page.
 
+## Step 4 - API Types and HTTP Client
+
+### Packages
+
+```bash
+npm install axios
+npm install -D openapi-typescript
+```
+
+`openapi-typescript` 7.13 declares `typescript@^5` as peer dependency, while
+`create-vue` set up TypeScript 6. The tool only uses the compiler to print the generated
+file, which works with TypeScript 6, so `package.json` overrides the peer range. A plain
+`npm install` then works without `--legacy-peer-deps`:
+
+```json
+"overrides": { "openapi-typescript": { "typescript": "$typescript" } }
+```
+
+### Generating the types
+
+```bash
+cd backend && npm run start:dev      # serves the spec at /api/docs-json
+cd frontend && npm run api:types     # openapi-typescript http://localhost:3000/api/docs-json -o src/api/schema.d.ts
+```
+
+The generated `src/api/schema.d.ts` (~1200 lines) is committed, so the frontend builds
+without a running backend. It is excluded from ESLint, oxlint and Prettier. Rerun the
+command whenever the backend's DTOs change.
+
+### Files
+
+```
+frontend/
+├── .env                      # VITE_API_URL=http://localhost:3000/api/v1
+├── env.d.ts                  # type of import.meta.env.VITE_API_URL
+└── src/api/
+    ├── schema.d.ts           # GENERATED from the OpenAPI spec, never edit
+    ├── types.ts              # readable aliases: MusicItem, CollectionEntry, Page<T>, ...
+    ├── http.ts               # the axios instance + interceptors
+    ├── api-error.ts          # ApiError: the only error type the app sees
+    └── __tests__/http.spec.ts
+```
+
+### Findings
+
+- The local `backend/music.sqlite` was created with an older schema (the old track
+  list), and TypeORM's automatic schema sync failed on it
+  (`UNIQUE constraint failed: temporary_music_item_track.containerId`). Fix: delete the
+  file or start the backend with a fresh `DB_PATH`. The backend recreates and seeds it.
+- On `master`, `GET /users` also requires `X-User-Id` (401 without it). The frontend
+  therefore always has a selected user (default set in step 6) before loading the user
+  list.
+- `GET /collections` (all users) has no user filter. "One user's collection" uses
+  `GET /users/{userId}/collection`.
+
+### Result
+
+- `npm run test:unit`: 22 tests. The 8 new tests replace axios's adapter (the part that
+  sends the request) to check the `X-User-Id` header and the error conversion without a
+  backend.
+- Checked once against the running backend:
+
+  | Request | Result |
+  | --- | --- |
+  | `GET /users` without user | `ApiError` 401 "Missing or invalid X-User-Id header" |
+  | `GET /users` as Anna | Admin, Anna, Ben |
+  | `GET /music-items?limit=3` | 3 items, `meta.total` 7 |
+  | `GET /music-items/999` | `ApiError` 404 "Music item 999 not found" |
+  | `POST /music-items` as Anna | `ApiError` 403 "Requires role ADMIN" |
+  | invalid `POST /music-items` as Admin | `ApiError` 400 "Please check your input.", 4 `details` |
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -482,7 +553,137 @@ this automatically. For static hosting such as GitHub Pages, this is handled in 
 
 ## 7. Communication with the Backend
 
-*Step 4.*
+*Introduced in step 4.*
+
+Vue has no built-in HTTP client (unlike Angular's `HttpClient`). Any library works: the
+browser's `fetch`, axios, ky, ... We use **axios** with one central instance, and
+**types generated from the backend's OpenAPI spec**.
+
+### Layers
+
+```
+View / component          calls a store or service, shows data and errors
+      │
+Pinia store (step 6)      shared state, e.g. the current user's collection
+      │
+Service (step 5)          one function per endpoint: getMusicItem(id), addToCollection(...)
+      │
+http.ts                   axios instance: base URL, X-User-Id header, ApiError conversion
+      │
+REST API /api/v1          NestJS backend (Exercise 1)
+```
+
+Components never build URLs or call axios themselves. This keeps them small and
+testable (see section 6).
+
+### Type-safe DTOs from OpenAPI
+
+The backend documents every DTO with `@nestjs/swagger` and serves the OpenAPI spec at
+`/api/docs-json`. `openapi-typescript` converts it into TypeScript types:
+
+```ts
+// schema.d.ts (generated)
+MusicItemDto: {
+  id: number
+  type: components['schemas']['MusicItemType']   // 'TRACK' | 'ALBUM' | 'PLAYLIST'
+  title: string
+  artist: string | null
+  trackCount: number | null
+  averageRating: number | null
+  createdAt: string                              // JSON has no Date type
+  // ...
+}
+
+// types.ts (handwritten aliases)
+export type MusicItem = components['schemas']['MusicItemDto']
+export type MusicItemQuery = NonNullable<paths['/api/v1/music-items']['get']['parameters']['query']>
+```
+
+The backend is the **single source of truth**. If it renames or removes a field, the
+next `npm run api:types` turns every outdated use in the frontend into a compile error.
+Without this, the mismatch shows up only at runtime, as `undefined` in the UI. Our first
+frontend attempt had exactly this problem when `trackIds` was replaced by `trackCount`.
+
+### The axios instance
+
+```ts
+// api/http.ts
+export const http = axios.create({
+  baseURL: import.meta.env.VITE_API_URL, // from .env, different per environment
+  timeout: 60_000,                       // Render's free plan needs ~30-50 s to wake up
+})
+```
+
+`import.meta.env` contains the variables from `.env` files that start with `VITE_`.
+Vite replaces them at **build time**, so they end up in the JavaScript bundle and must
+never contain secrets. For deployment the URL is set when building:
+`VITE_API_URL=https://…/api/v1 npm run build`.
+
+The backend enables CORS, so the browser may call `localhost:3000` from the dev server
+on `localhost:5173`. Alternatively, Vite's `server.proxy` could forward `/api` to the
+backend; we don't need that.
+
+### Interceptors
+
+Interceptors are functions that axios runs for **every** request or response. They hold
+the cross-cutting logic that would otherwise be repeated in every call:
+
+```ts
+// before every request: identify the caller
+http.interceptors.request.use((config) => {
+  const userId = currentUserId()
+  if (userId !== null) config.headers.set('X-User-Id', String(userId))
+  return config
+})
+
+// after every response: success passes through, every failure becomes an ApiError
+http.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(ApiError.from(error)),
+)
+```
+
+The current user lives in a Pinia store (step 6), but the API layer should not depend on
+UI state. So `http.ts` only offers `setUserIdProvider(fn)`, and the store registers a
+function that returns the selected id. The dependency points from the store to the API
+layer, not the other way round.
+
+### One error type: `ApiError`
+
+The backend's exception filter sends every error in one format:
+
+```json
+{ "statusCode": 404, "error": "Not Found", "message": "Music item 999 not found",
+  "path": "/api/v1/music-items/999", "timestamp": "2026-11-19T17:43:00.231Z" }
+```
+
+`message` is a list for validation errors. `ApiError.from()` turns every failure into
+one class with a readable message:
+
+| Situation | `kind` | `status` | `message` | `details` |
+| --- | --- | --- | --- | --- |
+| backend error (4xx/5xx) | `http` | 404, 403, … | backend's message | - |
+| validation error | `http` | 400 | "Please check your input." | individual messages |
+| backend down / offline / CORS | `network` | 0 | "The server cannot be reached. Is the backend running?" | - |
+| no answer within 60 s | `timeout` | 0 | "The server took too long to respond. Please try again." | - |
+| aborted on purpose | `canceled` | 0 | - | - |
+
+How the UI displays these errors follows in section 8.
+
+### Testing without a backend
+
+Axios sends requests through an exchangeable **adapter**. The tests replace it with a
+function that returns a prepared response, so the interceptors can be tested without
+network access:
+
+```ts
+http.defaults.adapter = async (config) => {
+  const response = { status: 404, data: { message: 'Music item 999 not found' }, config, headers: {}, statusText: '' }
+  throw new AxiosError('error', AxiosError.ERR_BAD_REQUEST, config, {}, response)
+}
+const error = await http.get('/music-items/999').catch((e) => e)
+expect(error).toMatchObject({ kind: 'http', status: 404, message: 'Music item 999 not found' })
+```
 
 ## 8. Error Handling
 
