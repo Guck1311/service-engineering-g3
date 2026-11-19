@@ -4,7 +4,18 @@
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>Music Collection Manager</title>
+    <script>
+      // Runs before the app bundle is loaded: set the color mode right away, so a
+      // dark-mode user never sees a flash of the light page. The theme store
+      // (src/stores/theme.ts) takes over once Vue has started; same storage key.
+      try {
+        var pref = localStorage.getItem('music-collection.theme') || 'auto'
+        var dark = pref === 'dark' || (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

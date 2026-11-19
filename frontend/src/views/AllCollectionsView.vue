@@ -89,7 +89,7 @@ function onFilterChange(event: Event) {
 
     <template v-else-if="result">
       <div class="table-responsive mb-3" :class="{ 'opacity-50': loading }">
-        <table class="table table-hover align-middle bg-body">
+        <table class="table table-hover align-middle">
           <thead>
             <tr>
               <th v-if="!userId" scope="col">User</th>

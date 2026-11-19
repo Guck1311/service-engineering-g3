@@ -54,6 +54,7 @@ role-dependent UI.
 | 5 | One service per backend resource | Separating logic from UI |
 | 6 | Pinia stores (current user, collection) | State management |
 | 7 | Views and components | Component model and life cycle |
+| 7b | Dark theme (light / dark / auto) | Styling, state management |
 | 8 | Interceptors, error alerts, toasts, 404 page | Error handling |
 | 9 | Polish, build, deploy, export to PDF | - |
 
@@ -462,6 +463,50 @@ src/utils/music-item-form.ts  form state, validation and request body as plain f
   | `/collection` | Get Lucky, Abbey Road |
   | `/collections` | 4 entries of Anna and Ben |
   | `/catalogue/6/edit` as Admin | form filled with "Abbey Road", 3 tracks |
+
+## Step 7b - Dark Theme
+
+### Files
+
+```
+frontend/
+├── index.html                  # inline script: set data-bs-theme before the bundle loads
+└── src/
+    ├── stores/theme.ts         # preference light/dark/auto, OS setting, sets data-bs-theme
+    ├── stores/__tests__/theme.spec.ts
+    ├── components/ThemeToggle.vue  # navbar button: light → dark → auto
+    ├── styles/_variables.scss  # dark colors, surfaces via var(--app-surface)
+    └── styles/main.scss        # @include color-mode(dark) { ... }
+```
+
+### Behaviour
+
+- The navbar button cycles **Light → Dark → Auto**. *Auto* (the default) follows the
+  operating system and switches live when the OS setting changes.
+- The choice is remembered in `localStorage`.
+- No light flash when loading in dark mode: `index.html` sets the attribute before the
+  app bundle is downloaded.
+
+### Problems
+
+- **Cards were the same color as the page.** Bootstrap's cards, list groups, tables and
+  inputs use `var(--bs-body-bg)` as background. In light mode our cards were only visible
+  through their shadow; in dark mode they would have disappeared. Fix: one more CSS
+  variable, `--app-surface` (white / `#221d2e`), used for all four.
+- **Contrast.** The brand purple `#6f42c1` has a contrast of **2.8:1** on the dark
+  background (WCAG AA requires 4.5:1 for text). In dark mode, outline buttons and
+  `.text-primary` use Bootstrap's `--bs-primary-text-emphasis` (`#a98eda`): **6.6:1** on
+  the page, **5.9:1** on cards. Body text on cards: 12.7:1.
+- **Static SCSS values don't switch.** The card hover shadow used the SCSS variable
+  `$box-shadow`, compiled into a fixed value. It now uses `var(--bs-box-shadow)`, which
+  dark mode overrides.
+
+### Result
+
+`npm run test:unit`: 90 tests. Theme store tests replace `matchMedia` (missing in jsdom)
+with a fake whose "OS setting" the test can change: default *auto* follows the system,
+an explicit choice overrides it, cycle order, persistence over a reload, fallback
+without `matchMedia`.
 
 ---
 
@@ -973,6 +1018,65 @@ const menuOpen = ref(false)
 (`{ show: menuOpen }`: the class is set while the value is truthy). When `menuOpen`
 changes, Vue updates exactly this attribute. Therefore we don't load Bootstrap's
 JavaScript bundle at all.
+
+### Color modes (dark theme)
+
+*Added in step 7b.*
+
+Bootstrap 5.3 defines its colors as **CSS custom properties** (`--bs-body-bg`,
+`--bs-primary-text-emphasis`, ...) and redefines them under `[data-bs-theme=dark]`. One
+attribute on `<html>` switches the whole UI at runtime, without a second stylesheet:
+
+```html
+<html data-bs-theme="dark">
+```
+
+**SCSS (build time) vs. CSS variables (runtime):** SCSS variables are replaced by fixed
+values when compiling. Anything that should differ per color mode must be a CSS
+variable:
+
+```scss
+// _variables.scss: Bootstrap's dark palette + our surfaces
+$body-bg-dark: #16131d;
+$card-bg: var(--app-surface);       // cards, list groups, tables, inputs
+
+// main.scss
+:root { --app-surface: #ffffff; }
+@include color-mode(dark) {          // Bootstrap mixin -> [data-bs-theme=dark] { ... }
+  --app-surface: #221d2e;
+  .btn-outline-primary { --bs-btn-color: var(--bs-primary-text-emphasis); }  // contrast
+}
+
+.card-hover:hover { box-shadow: var(--bs-box-shadow); }  // not $box-shadow (fixed value)
+```
+
+**Who sets the attribute?** A Pinia store, because the theme is global state (navbar
+button, `<html>` element, persistence):
+
+```ts
+// stores/theme.ts
+const preference = ref<ThemePreference>(readStoredPreference() ?? 'auto')
+
+const media = window.matchMedia('(prefers-color-scheme: dark)')
+const systemPrefersDark = ref(media.matches)
+media.addEventListener('change', (e) => (systemPrefersDark.value = e.matches)) // OS changes live
+
+const theme = computed(() =>
+  preference.value === 'auto' ? (systemPrefersDark.value ? 'dark' : 'light') : preference.value)
+
+watchEffect(() => document.documentElement.setAttribute('data-bs-theme', theme.value))
+```
+
+- `matchMedia` turns the OS setting into reactive state: browser event → `ref` →
+  `computed` → `watchEffect` → DOM attribute.
+- `watchEffect` runs immediately and then whenever a reactive value it read changes.
+  It is used here because `<html>` is outside the Vue app's template.
+
+**Avoiding the flash:** the store runs only after the JavaScript bundle has loaded. A
+small inline script in `index.html` runs before that and sets the attribute from the
+same `localStorage` key, so dark-mode users never see a white page first.
+`<meta name="color-scheme" content="light dark">` also makes the browser's own parts
+(scrollbars, form controls) follow the theme.
 
 ### Icons
 

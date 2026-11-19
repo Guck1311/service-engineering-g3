@@ -8,13 +8,36 @@
 @import 'variables';
 @import 'bootstrap/scss/bootstrap';
 
+// Color modes: CSS custom properties are resolved at RUNTIME, so switching
+// data-bs-theme on <html> changes the colors without reloading any CSS.
+:root {
+  --app-surface: #ffffff;
+}
+
+// Bootstrap mixin: generates `[data-bs-theme=dark] { ... }`
+@include color-mode(dark) {
+  --app-surface: #221d2e;
+  --bs-box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+
+  // The brand purple has too little contrast on the dark background (~2.8:1).
+  // Text and outlines use Bootstrap's lighter "emphasis" variant instead (~6.5:1).
+  .btn-outline-primary {
+    --bs-btn-color: var(--bs-primary-text-emphasis);
+    --bs-btn-border-color: var(--bs-primary-text-emphasis);
+  }
+
+  .text-primary {
+    color: var(--bs-primary-text-emphasis) !important;
+  }
+}
+
 // Global app styles
 
 body {
   min-height: 100vh;
 }
 
-// Cards lift slightly on hover; used for the music item cards later.
+// Cards lift slightly on hover (music item cards).
 .card-hover {
   transition:
     transform 0.15s ease-in-out,
@@ -22,6 +45,7 @@ body {
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: $box-shadow;
+    // The CSS variable (not the SCSS $box-shadow) so the dark mode value applies.
+    box-shadow: var(--bs-box-shadow);
   }
 }

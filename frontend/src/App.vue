@@ -4,6 +4,10 @@ import { RouterView } from 'vue-router'
 import AppNavbar from '@/components/AppNavbar.vue'
 import { useCollectionStore } from '@/stores/collection'
 import { useSessionStore } from '@/stores/session'
+import { useThemeStore } from '@/stores/theme'
+
+// Created here so the color mode is applied from the first render on.
+useThemeStore()
 
 const session = useSessionStore()
 const collection = useCollectionStore()

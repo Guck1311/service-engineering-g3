@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useCollectionStore } from '@/stores/collection'
+import ThemeToggle from './ThemeToggle.vue'
 import UserSwitcher from './UserSwitcher.vue'
 
 /** One entry in the main navigation. */
@@ -85,7 +86,10 @@ function closeMenu() {
             </RouterLink>
           </li>
         </ul>
-        <UserSwitcher class="py-2 py-md-0" />
+        <div class="d-flex align-items-center gap-2 py-2 py-md-0">
+          <UserSwitcher />
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   </nav>
