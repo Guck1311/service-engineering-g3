@@ -43,6 +43,9 @@ export type MusicItemQuery = NonNullable<paths['/api/v1/music-items']['get']['pa
 export type CollectionQuery = NonNullable<
   paths['/api/v1/users/{userId}/collection']['get']['parameters']['query']
 >
+export type CommentQuery = NonNullable<
+  paths['/api/v1/music-items/{id}/comments']['get']['parameters']['query']
+>
 export type AllCollectionsQuery = NonNullable<
   paths['/api/v1/collections']['get']['parameters']['query']
 >

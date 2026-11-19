@@ -298,6 +298,58 @@ frontend/
   | `POST /music-items` as Anna | `ApiError` 403 "Requires role ADMIN" |
   | invalid `POST /music-items` as Admin | `ApiError` 400 "Please check your input.", 4 `details` |
 
+## Step 5 - Services, Composable and Utilities
+
+### Files
+
+```
+src/
+├── services/                     # plain TypeScript, one object per backend resource
+│   ├── users.service.ts          # list, get
+│   ├── music-items.service.ts    # list(query), get, create, update, remove
+│   ├── collections.service.ts    # listAll, listOfUser, add, update, remove
+│   ├── comments.service.ts       # list, create
+│   ├── ratings.service.ts        # summary, rate
+│   └── __tests__/services.spec.ts
+├── composables/
+│   ├── useAsync.ts               # loading / error / data state for any async call
+│   └── __tests__/useAsync.spec.ts
+└── utils/
+    ├── format.ts                 # formatDuration, formatDate, formatDateTime, pluralize
+    └── __tests__/format.spec.ts
+```
+
+The 16 endpoints map to 16 service functions. `CommentQuery` was added to
+`api/types.ts`.
+
+### Problem: `readonly()` vs. `computed()`
+
+`useAsync` first returned its state with `readonly(data)`. The type check failed:
+`readonly()` is **deep**, so `data` became `DeepReadonly<MusicItem>`, which cannot be
+passed to code expecting a `MusicItem`. Only the ref itself should be read-only, so the
+state is now returned as `computed(() => data.value)`, a computed without a setter.
+
+### Result
+
+- `npm run test:unit`: 46 tests. Service tests record the request instead of sending it
+  and check method, URL, query parameters and body of all 16 functions. `useAsync` tests
+  use promises resolved by hand to check the loading state, the error state and
+  overlapping calls.
+- Checked once against the running backend as Anna:
+
+  | Action | Result |
+  | --- | --- |
+  | `list({ type: 'ALBUM' })` / `list({ search: 'come' })` | Abbey Road (3 tracks) / Come Together, Here Comes the Sun |
+  | add an item that is already in the collection | `ApiError` 409 "Music item 4 is already in the collection" |
+  | add, then `update({ reaction: 'LIKE', favourite: true })` | entry with `LIKE`, favourite |
+  | `update({ reaction: 'DISLIKE' })` while favourite | `ApiError` 400 "A disliked item cannot be a favourite" |
+  | add to Ben's collection | `ApiError` 403 "You can only modify your own data" |
+  | rate 4 stars, comment | average 4 (1 rating); comment by Anna |
+  | remove | collection back to 2 entries |
+
+  The backend enforces the business rules. The frontend only has to show its messages
+  (step 8).
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -549,7 +601,118 @@ this automatically. For static hosting such as GitHub Pages, this is handled in 
 
 ## 6. Separating Logic from UI Components
 
-*Step 5.*
+*Introduced in step 5, stores in step 6.*
+
+Components should mostly **display** data and **forward** user actions. Everything else
+goes into separate modules. Unlike Angular, Vue has no dependency-injection-based service
+concept. It uses plain ES modules, and for reactive logic, **composables**.
+
+| Kind | Example | Contains | Uses Vue? | State |
+| --- | --- | --- | --- | --- |
+| **Service** | `musicItemsService.get(id)` | endpoint calls, request/response types | no | none |
+| **Utility** | `formatDuration(259)` | pure functions | no | none |
+| **Composable** | `useAsync(fn)` | reusable reactive logic | yes (`ref`, `computed`, lifecycle hooks) | **one copy per component** that calls it |
+| **Store** (step 6) | `useSessionStore()` | state shared by the app | yes (Pinia) | **one copy for the whole app** |
+| **Component** | `CatalogueView.vue` | template, wiring | yes | UI state only (e.g. "menu open") |
+
+### Services
+
+A service is a plain object with one async function per endpoint. It knows URLs, HTTP
+methods and types, and returns the response body:
+
+```ts
+// services/music-items.service.ts
+export const musicItemsService = {
+  async list(query: MusicItemQuery = {}): Promise<Page<MusicItem>> {
+    const { data } = await http.get<Page<MusicItem>>('/music-items', { params: query })
+    return data
+  },
+  async get(id: number): Promise<MusicItem> { … },
+  async create(item: CreateMusicItem): Promise<MusicItem> { … },
+  async update(id: number, item: UpdateMusicItem): Promise<MusicItem> { … },
+  async remove(id: number): Promise<void> { … },
+}
+```
+
+Why:
+
+- **One place per endpoint.** If a URL changes, only the service changes.
+- **Components stay small.** `await musicItemsService.get(id)` instead of URL building,
+  headers and response unpacking.
+- **Testable without a browser.** Services are plain functions (see the service tests).
+- **Reusable.** The same function serves the detail page, the edit form and a store.
+
+### Composables
+
+A composable is a function named `useXxx()` that uses Vue's reactivity API and returns
+reactive state. It is Vue's main tool for reusing **stateful** logic between components,
+comparable to React hooks (but it runs only once per component, during `setup`).
+
+`useAsync` wraps any async function and provides `loading`, `error` and `data`:
+
+```ts
+// composables/useAsync.ts (simplified)
+export function useAsync<T, A extends unknown[]>(fn: (...args: A) => Promise<T>) {
+  const data = shallowRef<T>()
+  const error = shallowRef<ApiError | null>(null)
+  const loading = ref(false)
+  let latestCall = 0
+
+  async function run(...args: A) {
+    const call = ++latestCall
+    loading.value = true
+    error.value = null
+    try {
+      const result = await fn(...args)
+      if (call === latestCall) data.value = result // ignore outdated responses
+      return result
+    } catch (e) {
+      if (call === latestCall) error.value = ApiError.from(e)
+    } finally {
+      if (call === latestCall) loading.value = false
+    }
+  }
+
+  return { data: computed(() => data.value), error: computed(() => error.value),
+           loading: computed(() => loading.value), run }
+}
+```
+
+```vue
+<!-- usage in a component -->
+<script setup lang="ts">
+const props = defineProps<{ id: number }>()
+const { data: item, loading, error, run } = useAsync(musicItemsService.get)
+onMounted(() => run(props.id))
+</script>
+
+<template>
+  <div v-if="loading" class="spinner-border" />
+  <div v-else-if="error" class="alert alert-danger">{{ error.message }}</div>
+  <h1 v-else-if="item">{{ item.title }}</h1>
+</template>
+```
+
+Details:
+
+- **Each call creates new state.** Two components calling `useAsync` don't share
+  anything. Shared state is what stores are for.
+- **`shallowRef`**: API results are replaced as a whole, never mutated deeply, so Vue
+  only tracks the reference, not every nested property.
+- **Race condition protection**: when calls overlap (typing "ab", then "abbey" in a
+  search field), the response for "ab" may arrive *after* the one for "abbey".
+  `latestCall` makes sure only the newest call updates the state.
+- **Read-only state**: the component can read `loading`, `error`, `data` but only change
+  them through `run()`. `computed()` instead of `readonly()` keeps the types plain (see
+  step 5).
+- **Never throws**: errors become state the template can show. Section 8 covers how
+  errors reach the user.
+
+### Utilities
+
+Pure functions without Vue, e.g. `formatDuration(259) → "4:19"`,
+`formatDate(iso) → "19 Nov 2026"` (with `Intl.DateTimeFormat`). Templates call them
+directly: `{{ formatDuration(item.durationSeconds) }}`.
 
 ## 7. Communication with the Backend
 
