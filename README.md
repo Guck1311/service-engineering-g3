@@ -84,7 +84,7 @@ backend/src/
 | `MusicItem`       | `id`, `type` (`TRACK` \| `ALBUM` \| `PLAYLIST`), `title`, `artist?`, `genre?`, `releaseYear?`, `durationSeconds?`, `trackCount?`, `externalUrl?`, `createdAt`, `updatedAt` | `externalUrl` references the actual music (e.g. Spotify/YouTube link); albums and playlists store `trackCount` and their total `durationSeconds` |
 | `CollectionEntry` | `id`, `userId`, `musicItemId`, `reaction` (`NONE` \| `LIKE` \| `DISLIKE`), `favourite` (boolean), `addedAt`                   | Unique per (`userId`, `musicItemId`)                                        |
 | `Comment`         | `id`, `userId`, `musicItemId`, `text`, `createdAt`                                                                           |                                                                             |
-| `Rating`          | `userId`, `musicItemId`, `stars` (1–5), `updatedAt`                                                                          | Unique per (`userId`, `musicItemId`)                                        |
+| `Rating`          | `userId`, `musicItemId`, `stars` (1-5), `updatedAt`                                                                          | Unique per (`userId`, `musicItemId`)                                        |
 
 Rules:
 
