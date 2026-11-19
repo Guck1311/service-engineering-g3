@@ -183,6 +183,50 @@ css: {
   it for this project.
 - `npm run test:unit`: 2 tests for the navbar (rendering, mobile toggle).
 
+## Step 3 - Routes and Placeholder Views
+
+### Route table
+
+| Path | Name | View | Notes |
+| --- | --- | --- | --- |
+| `/` | - | redirect to `catalogue` | |
+| `/catalogue` | `catalogue` | `CatalogueView` | start page, loaded eagerly |
+| `/catalogue/new` | `item-create` | `MusicItemEditView` | `meta.requiresAdmin` |
+| `/catalogue/:id(\d+)` | `item-detail` | `MusicItemDetailView` | `id` as number prop |
+| `/catalogue/:id(\d+)/edit` | `item-edit` | `MusicItemEditView` | same view as create, `meta.requiresAdmin` |
+| `/collection` | `my-collection` | `MyCollectionView` | |
+| `/collections?userId=2` | `all-collections` | `AllCollectionsView` | optional filter as query parameter |
+| `/:pathMatch(.*)*` | `not-found` | `NotFoundView` | catch-all |
+
+The views are placeholders with sample data; they get real data in step 7. Each one
+already shows one navigation technique (see section 5). `HomeView` (the theme preview)
+was removed.
+
+### Files
+
+```
+src/
+├── router/
+│   ├── index.ts                 # routes, typed meta, scrollBehavior, title hook
+│   └── __tests__/router.spec.ts
+├── components/AppNavbar.vue     # links to the three sections, active state via useRoute()
+└── views/
+    ├── CatalogueView.vue        # links by route name + params
+    ├── MusicItemDetailView.vue  # id as prop, router.back()
+    ├── MusicItemEditView.vue    # create + edit in one view, router.replace() after saving
+    ├── MyCollectionView.vue
+    ├── AllCollectionsView.vue   # filter stored in the URL query
+    └── NotFoundView.vue
+```
+
+### Result
+
+- `npm run build`: every lazy-loaded view becomes its own chunk of 0.4-1 kB
+  (`MusicItemDetailView-*.js`, ...), downloaded on first visit.
+- `npm run test:unit`: 14 tests. The router tests resolve every path to its route name
+  (including `/catalogue/abc` → 404) and check the admin meta flags. The navbar tests
+  mount the navbar with the real route table and check the active link per page.
+
 ---
 
 # Part 2 - Vue.js Reference
@@ -305,7 +349,132 @@ files into the build and adds a content hash to their file names for caching.
 
 ## 5. Routing and Navigation
 
-*Step 3.*
+*Introduced in step 3.*
+
+In an SPA the browser loads `index.html` only once. When the user clicks a link, the
+**client-side router** intercepts the click, changes the URL via the History API
+(`history.pushState`) and swaps the component shown in `<RouterView>`. Nothing is
+requested from the server. Vue's official router is **Vue Router**.
+
+### Setup
+
+```ts
+// router/index.ts
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    { path: '/catalogue', name: 'catalogue', component: CatalogueView },
+    { path: '/catalogue/:id(\\d+)', name: 'item-detail',
+      component: () => import('@/views/MusicItemDetailView.vue'),
+      props: (route) => ({ id: Number(route.params.id) }) },
+    // ...
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
+  ],
+})
+
+// main.ts
+app.use(router)
+```
+
+```vue
+<!-- App.vue: the matched component is rendered here -->
+<AppNavbar />
+<main><RouterView /></main>
+```
+
+### Concepts
+
+| Concept | Example | Purpose |
+| --- | --- | --- |
+| **History mode** | `createWebHistory()` | real URLs (`/catalogue/6`). Alternative: `createWebHashHistory()` → `/#/catalogue/6` |
+| **Named routes** | `{ name: 'item-detail', params: { id: 6 } }` | links don't hard-code paths |
+| **Dynamic segments** | `:id(\\d+)` | parameter with a regex: `/catalogue/abc` doesn't match |
+| **Route props** | `props: (route) => ({ id: Number(route.params.id) })` | the view gets a typed prop and doesn't depend on the router |
+| **Query parameters** | `/collections?userId=2` | optional state that belongs in the URL (filters) |
+| **Redirect** | `{ path: '/', redirect: { name: 'catalogue' } }` | |
+| **Catch-all (404)** | `/:pathMatch(.*)*` | must match last |
+| **Lazy loading** | `component: () => import('...')` | separate chunk, loaded on the first visit |
+| **Route meta** | `meta: { title, requiresAdmin }` | custom data per route, read by guards |
+| **Guards** | `router.beforeEach`, `router.afterEach` | run around every navigation (title now, admin check in step 6) |
+| **Scroll behaviour** | `scrollBehavior` | restore the scroll position on Back, otherwise start at the top |
+
+### Navigating
+
+**Declarative:** `<RouterLink>` renders an `<a href>`. A normal click is handled by the
+router, while Ctrl+click or "open in new tab" still work because it is a real link.
+
+```vue
+<RouterLink :to="{ name: 'item-detail', params: { id: item.id } }">{{ item.title }}</RouterLink>
+```
+
+**Programmatic:** `useRouter()` returns the router instance, for navigation after an
+action:
+
+```ts
+const router = useRouter()
+router.push({ name: 'item-detail', params: { id } })    // new history entry
+router.replace({ name: 'item-detail', params: { id } }) // replaces the current entry (after saving a form)
+router.replace({ query: { userId: '2' } })              // only change the query (filter)
+router.back()                                           // browser Back
+```
+
+**Reading the current route:** `useRoute()` returns a *reactive* route object.
+Templates and `computed` values that use it update automatically after each navigation:
+
+```ts
+const route = useRoute()
+const isActive = (to: string) => route.path === to || route.path.startsWith(`${to}/`)
+```
+
+### Route props instead of `useRoute()` in views
+
+A view *could* read `useRoute().params.id` itself, but then it only works under exactly
+that URL, and the parameter is always a string. With `props`, the router converts it,
+and the view just declares what it needs:
+
+```ts
+// MusicItemDetailView.vue
+const props = defineProps<{ id: number }>()
+```
+
+`MusicItemEditView` uses this for two routes: `/catalogue/new` passes no `id` (create),
+`/catalogue/:id/edit` passes one (edit).
+
+### State in the URL
+
+The user filter of the overview page is kept in the **query string**, not only in a
+component variable. A filtered page can therefore be bookmarked, reloaded and shared, and
+Back/Forward restore earlier filters. When the query changes, the router passes a new
+`userId` prop and the view updates.
+
+### Typed route meta
+
+```ts
+declare module 'vue-router' {
+  interface RouteMeta { title?: string; requiresAdmin?: boolean }
+}
+
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · Music Collection Manager` : 'Music Collection Manager'
+})
+```
+
+Declaration merging extends Vue Router's `RouteMeta` type, so `to.meta.requiresAdmin` is
+type-checked. The admin guard (`beforeEach`) that uses this flag follows with the user
+state in step 6.
+
+### Active links
+
+`<RouterLink>` adds `router-link-active` / `router-link-exact-active` automatically.
+These are based on **nested route records**, not path prefixes: with our flat routes,
+the "Catalogue" link would not be active on `/catalogue/6`. The navbar therefore binds
+Bootstrap's `active` class itself, comparing `useRoute().path` with each entry's prefix.
+
+### Deployment note
+
+History mode needs the web server to answer every unknown path with `index.html`
+(otherwise reloading `/catalogue/6` gives the server's 404). Vite's dev server does
+this automatically. For static hosting such as GitHub Pages, this is handled in step 9.
 
 ## 6. Separating Logic from UI Components
 
