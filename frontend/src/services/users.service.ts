@@ -8,10 +8,4 @@ export const usersService = {
     const { data } = await http.get<User[]>('/users')
     return data
   },
-
-  /** GET /users/{id} */
-  async get(id: number): Promise<User> {
-    const { data } = await http.get<User>(`/users/${id}`)
-    return data
-  },
 }

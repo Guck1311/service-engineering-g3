@@ -1,5 +1,6 @@
 import { http } from '@/api/http'
 import type {
+  AddCollectionEntry,
   AllCollectionsQuery,
   CollectionEntry,
   CollectionQuery,
@@ -25,9 +26,9 @@ export const collectionsService = {
 
   /** POST /users/{userId}/collection: only allowed for the user's own collection. */
   async add(userId: number, musicItemId: number): Promise<CollectionEntry> {
-    const { data } = await http.post<CollectionEntry>(`/users/${userId}/collection`, {
-      musicItemId,
-    })
+    // Typed with the generated DTO: a renamed field in the backend becomes a compile error.
+    const body: AddCollectionEntry = { musicItemId }
+    const { data } = await http.post<CollectionEntry>(`/users/${userId}/collection`, body)
     return data
   },
 

@@ -34,10 +34,6 @@ export class ApiError extends Error {
     return this.status === 404
   }
 
-  get isForbidden() {
-    return this.status === 401 || this.status === 403
-  }
-
   /** Converts anything thrown by axios into an ApiError. */
   static from(error: unknown): ApiError {
     if (error instanceof ApiError) return error

@@ -24,7 +24,6 @@ export const useCollectionStore = defineStore('collection', () => {
   /** Lookup by music item id; recomputed only when `entries` changes. */
   const byItemId = computed(() => new Map(entries.value.map((e) => [e.musicItem.id, e])))
   const count = computed(() => entries.value.length)
-  const favouriteCount = computed(() => entries.value.filter((e) => e.favourite).length)
 
   function entryFor(musicItemId: number): CollectionEntry | undefined {
     return byItemId.value.get(musicItemId)
@@ -135,7 +134,6 @@ export const useCollectionStore = defineStore('collection', () => {
     loaded,
     error,
     count,
-    favouriteCount,
     entryFor,
     has,
     load,

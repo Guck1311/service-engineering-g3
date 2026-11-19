@@ -1,5 +1,5 @@
 import { http } from '@/api/http'
-import type { Comment, CommentQuery, Page } from '@/api/types'
+import type { Comment, CommentQuery, CreateComment, Page } from '@/api/types'
 
 /** Comments on music items. */
 export const commentsService = {
@@ -13,7 +13,8 @@ export const commentsService = {
 
   /** POST /music-items/{id}/comments as the current user. */
   async create(musicItemId: number, text: string): Promise<Comment> {
-    const { data } = await http.post<Comment>(`/music-items/${musicItemId}/comments`, { text })
+    const body: CreateComment = { text }
+    const { data } = await http.post<Comment>(`/music-items/${musicItemId}/comments`, body)
     return data
   },
 }

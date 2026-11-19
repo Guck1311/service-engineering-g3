@@ -42,7 +42,6 @@ describe('services map functions to endpoints', () => {
 
   it.each([
     ['usersService.list', () => usersService.list(), 'GET', '/users'],
-    ['usersService.get', () => usersService.get(2), 'GET', '/users/2'],
     ['musicItemsService.get', () => musicItemsService.get(6), 'GET', '/music-items/6'],
     ['musicItemsService.remove', () => musicItemsService.remove(6), 'DELETE', '/music-items/6'],
     ['collectionsService.listAll', () => collectionsService.listAll(), 'GET', '/collections'],

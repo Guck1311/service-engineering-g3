@@ -1,5 +1,5 @@
 import { http } from '@/api/http'
-import type { Rating, RatingSummary } from '@/api/types'
+import type { Rate, Rating, RatingSummary } from '@/api/types'
 
 /** 1-5 star ratings; one per user and item. */
 export const ratingsService = {
@@ -11,9 +11,8 @@ export const ratingsService = {
 
   /** PUT /music-items/{id}/ratings/{userId}: creates or replaces the user's own rating. */
   async rate(musicItemId: number, userId: number, stars: number): Promise<Rating> {
-    const { data } = await http.put<Rating>(`/music-items/${musicItemId}/ratings/${userId}`, {
-      stars,
-    })
+    const body: Rate = { stars }
+    const { data } = await http.put<Rating>(`/music-items/${musicItemId}/ratings/${userId}`, body)
     return data
   },
 }

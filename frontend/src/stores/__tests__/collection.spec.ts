@@ -59,7 +59,6 @@ describe('collection store', () => {
 
     expect(service.listOfUser).toHaveBeenCalledWith(2, { page: 1, limit: 100 })
     expect(collection.count).toBe(2)
-    expect(collection.favouriteCount).toBe(1)
     expect(collection.has(6)).toBe(true)
     expect(collection.has(1)).toBe(false)
   })

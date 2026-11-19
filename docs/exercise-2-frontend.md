@@ -320,7 +320,8 @@ src/
     └── __tests__/format.spec.ts
 ```
 
-The 16 endpoints map to 16 service functions. `CommentQuery` was added to
+The backend has 16 endpoints; 15 have a service function. `GET /users/{id}` is not
+needed, because the app loads the whole user list once. `CommentQuery` was added to
 `api/types.ts`.
 
 ### Problem: `readonly()` vs. `computed()`
@@ -333,7 +334,7 @@ state is now returned as `computed(() => data.value)`, a computed without a sett
 ### Result
 
 - `npm run test:unit`: 46 tests. Service tests record the request instead of sending it
-  and check method, URL, query parameters and body of all 16 functions. `useAsync` tests
+  and check method, URL, query parameters and body of all 15 functions. `useAsync` tests
   use promises resolved by hand to check the loading state, the error state and
   overlapping calls.
 - Checked once against the running backend as Anna:
