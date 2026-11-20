@@ -60,6 +60,8 @@ There is no login: pick the user (Admin, Anna, Ben) in the navbar. Admin pages a
 | `npm run test:unit` | Vitest (watch mode; `-- --run` for a single run) |
 | `npm run lint` / `npm run format` | oxlint + ESLint / Prettier (fixing) |
 | `npm run api:types` | regenerate `src/api/schema.d.ts` from the running backend's OpenAPI spec |
+| `npm run storybook` | component catalogue on http://localhost:6006: every component and page in every state, on a fake backend (no backend needed) |
+| `npm run build-storybook` | static Storybook build into `storybook-static/` |
 
 The backend URL is set in `frontend/.env` (`VITE_API_URL`); override it locally in `frontend/.env.local`.
 
@@ -151,7 +153,7 @@ All paths are relative to `/api/v1`.
 Every push to `master` updates the live app:
 
 - **Backend → Render**, configured in [`render.yaml`](render.yaml). The free plan sleeps when idle (the first request then takes ~30 s), and the SQLite database is reset to the demo data on every deploy.
-- **Frontend → GitHub Pages**, built by [`.github/workflows/deploy-frontend.yml`](.github/workflows/deploy-frontend.yml) against the backend URL in the repository variable `API_URL`. It can also be started manually in the Actions tab.
+- **Frontend → GitHub Pages**, built by [`.github/workflows/deploy-frontend.yml`](.github/workflows/deploy-frontend.yml) against the backend URL in the repository variable `API_URL`. It can also be started manually in the Actions tab. The Storybook is published next to the app under `/storybook/`.
 
 One-time setup:
 

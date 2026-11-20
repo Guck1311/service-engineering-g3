@@ -1,0 +1,45 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="Introduction" />
+
+# Music Collection Manager: component catalogue
+
+This Storybook shows every component of the frontend **in isolation and in each of its
+states**: loading, empty, filled, read-only, and every kind of error. No backend is
+needed: the stories run against a fake backend in the browser.
+
+## How it is organized
+
+| Section            | Content                                                                     |
+| ------------------ | --------------------------------------------------------------------------- |
+| **Error handling** | Where each kind of error ends up, with buttons that trigger them            |
+| **Errors**         | The components that show errors: alert, toasts, banner, error boundary, 404 |
+| **Basics**         | Small presentational components: badge, stars, spinner, pagination          |
+| **Music**          | Cards, reactions, collection button, ratings, comments, the admin form      |
+| **App shell**      | Navbar, user switcher, theme toggle                                         |
+| **Pages**          | The complete app at a given URL, as a given user, in a given situation      |
+
+Every component also has a **Docs** page with its props, events and slots, generated from
+the TypeScript types of the component.
+
+## How the stories work
+
+- **Fake backend** (`src/stories/fake-backend.ts`): an in-memory copy of our NestJS API
+  with the seed data and the same rules and messages (401, 403, 404, 409, 400). It
+  replaces only the _adapter_ of our axios instance, so services, interceptors and
+  `ApiError` are the real ones. A story can override single routes, e.g. to answer
+  with `failWith(500)`, `networkError` or `pending` (never answers: loading state).
+- **Fresh state per story**: each story gets its own Pinia, router (in-memory history)
+  and fake backend, set up in `.storybook/preview.ts` like `main.ts` sets up the app.
+- **Toolbar**: switch between the **light and dark theme**; the viewport button shows
+  the components on a phone.
+- **Panels**: _Controls_ changes props live, _Actions_ lists emitted events and every
+  API request, _Accessibility_ checks contrast and ARIA attributes.
+
+## Running it
+
+```bash
+cd frontend
+npm run storybook         # http://localhost:6006
+npm run build-storybook   # static site in storybook-static/
+```
