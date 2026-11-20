@@ -1,6 +1,9 @@
-# Music Collection Manager – Backend
+# Music Collection Manager
 
-KV Service Engineering WS 2026/2027, Exercise 1 (Group 3). REST backend built with NestJS.
+KV Service Engineering WS 2026/2027, Group 3.
+
+- **Exercise 1 - Backend:** REST API built with NestJS (this README).
+- **Exercise 2 - Frontend:** Vue.js single page application in [`frontend/`](frontend/), see [Frontend](#frontend) and the documentation in [`docs/exercise-2-frontend.md`](docs/exercise-2-frontend.md).
 
 ## Requirements (from the assignment sheet)
 
@@ -35,6 +38,31 @@ npm test          # unit tests
 npm run test:e2e  # API tests against an in-memory database
 ```
 
+If the backend fails to start with `UNIQUE constraint failed: temporary_music_item_track…`, the local database still has an older schema: delete `backend/music.sqlite` and start again.
+
+## Frontend
+
+Vue 3 + Vite + TypeScript, Vue Router, Pinia, Bootstrap 5 (SCSS theme, light/dark mode), axios with types generated from the backend's OpenAPI spec. The full documentation, structured by the presentation topics, is in [`docs/exercise-2-frontend.md`](docs/exercise-2-frontend.md).
+
+```bash
+cd backend && npm run start:dev    # the frontend needs the backend on port 3000
+cd frontend
+npm install
+npm run dev                        # http://localhost:5173
+```
+
+There is no login: pick the user (Admin, Anna, Ben) in the navbar. Admin pages and buttons appear only for the admin.
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | dev server with hot module replacement |
+| `npm run build` | type check + production build into `dist/` |
+| `npm run test:unit` | Vitest (watch mode; `-- --run` for a single run) |
+| `npm run lint` / `npm run format` | oxlint + ESLint / Prettier (fixing) |
+| `npm run api:types` | regenerate `src/api/schema.d.ts` from the running backend's OpenAPI spec |
+
+The backend URL is set in `frontend/.env` (`VITE_API_URL`); override it locally in `frontend/.env.local`.
+
 ## Structure
 
 ```
@@ -56,7 +84,7 @@ backend/src/
 | `MusicItem`       | `id`, `type` (`TRACK` \| `ALBUM` \| `PLAYLIST`), `title`, `artist?`, `genre?`, `releaseYear?`, `durationSeconds?`, `trackCount?`, `externalUrl?`, `createdAt`, `updatedAt` | `externalUrl` references the actual music (e.g. Spotify/YouTube link); albums and playlists store `trackCount` and their total `durationSeconds` |
 | `CollectionEntry` | `id`, `userId`, `musicItemId`, `reaction` (`NONE` \| `LIKE` \| `DISLIKE`), `favourite` (boolean), `addedAt`                   | Unique per (`userId`, `musicItemId`)                                        |
 | `Comment`         | `id`, `userId`, `musicItemId`, `text`, `createdAt`                                                                           |                                                                             |
-| `Rating`          | `userId`, `musicItemId`, `stars` (1–5), `updatedAt`                                                                          | Unique per (`userId`, `musicItemId`)                                        |
+| `Rating`          | `userId`, `musicItemId`, `stars` (1-5), `updatedAt`                                                                          | Unique per (`userId`, `musicItemId`)                                        |
 
 Rules:
 

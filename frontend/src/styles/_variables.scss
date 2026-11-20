@@ -1,0 +1,43 @@
+// Theme overrides for Bootstrap.
+//
+// Bootstrap declares every variable with `!default`, which means "use this value
+// unless the variable already has one". Because this file is imported BEFORE
+// Bootstrap (see main.scss), our values win and Bootstrap compiles all its
+// components (buttons, badges, links, ...) with them.
+
+// Colors
+$primary: #6f42c1; // purple as brand color
+$body-bg: #f6f5fa;
+
+// Dark color mode (Bootstrap 5.3 uses these when <html data-bs-theme="dark">)
+$body-bg-dark: #16131d; // near-black with a hint of the brand purple
+$body-color-dark: #e4e1ec;
+$border-color-dark: #2f2a3b;
+
+// "Surfaces" (cards, list groups, tables, inputs) use the page background by
+// default. A separate CSS variable, set per color mode in main.scss, keeps them
+// distinguishable from the page in both themes.
+$card-bg: var(--app-surface);
+$list-group-bg: var(--app-surface);
+$table-bg: var(--app-surface);
+$input-bg: var(--app-surface);
+
+// Typography
+$font-family-sans-serif:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  'Helvetica Neue',
+  Arial,
+  sans-serif;
+
+// Shapes
+$border-radius: 0.5rem;
+$border-radius-lg: 0.75rem;
+$card-border-width: 0;
+$card-box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.06);
+$enable-shadows: true;
+
+// Custom variables of our app (not Bootstrap's)
+$navbar-brand-gradient: linear-gradient(90deg, #ffffff, #d6c8f5);

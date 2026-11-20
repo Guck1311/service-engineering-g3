@@ -9,8 +9,9 @@ services:
     rootDir: backend
     buildCommand: npm ci && npm run build
     startCommand: npm run start:prod
-    # Public endpoint, so the health check needs no X-User-Id header.
-    healthCheckPath: /api/v1/users
+    # Must answer 200 without headers. /api/v1/users needs X-User-Id (401), so the
+    # public OpenAPI document is used: it is only served once the app has started.
+    healthCheckPath: /api/docs-json
     envVars:
       - key: NODE_VERSION
         value: "24"
