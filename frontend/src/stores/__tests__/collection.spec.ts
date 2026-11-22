@@ -132,7 +132,7 @@ describe('collection store', () => {
     expect(collection.has(1)).toBe(true) // still in the collection
     expect(service.add).toHaveBeenCalledTimes(1) // no second POST
   })
-  
+
   it('reloads when another user is selected', async () => {
     const collection = useCollectionStore()
     await collection.load()
