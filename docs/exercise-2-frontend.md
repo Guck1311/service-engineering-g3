@@ -414,7 +414,7 @@ src/
 | Page | Data from | Features |
 | --- | --- | --- |
 | Catalogue | `useAsync(musicItemsService.list)` | search (debounced), type filter, pagination, all three stored in the URL; add/remove per card |
-| Detail | `useAsync(musicItemsService.get)` + child components | facts, link, collection button, like/dislike/favourite, ratings, comments; admin: edit, delete |
+| Detail | `useAsync(musicItemsService.get)` + child components | facts, link, collection button, like/dislike/favourite (adds the item if needed), ratings, comments; admin: edit, delete |
 | New / edit item | `MusicItemForm` | client-side validation (same rules as the backend), server errors with details, "unsaved changes" warning |
 | My collection | collection store | filter tabs with counts, reactions, remove (animated) |
 | All collections | `useAsync` with two service calls | all users or one (`?userId=`), table, pagination |
@@ -447,6 +447,11 @@ src/utils/music-item-form.ts  form state, validation and request body as plain f
 - **`defineModel` without a listening parent** (test assumption): when the parent does
   not listen to `update:page`, `defineModel` keeps the new value *locally*. The test
   had expected the component to still be on the old page.
+- **Reactions only after "Add to collection"** (usability): on the detail page the buttons
+  were hidden until the item was added. Now they are always shown; the store adds the
+  item first (POST), then sets the reaction (PATCH), and `ReactionControls` stayed
+  unchanged. Resetting the reaction keeps the item, because removing should be explicit.
+  The catalogue cards keep only the collection button, to stay compact.
 
 ### Result
 
@@ -760,7 +765,7 @@ named `*.ce.vue`. Vue templates can also use existing custom elements. The compi
 are not Vue components with `compilerOptions.isCustomElement`. We don't need either
 direction, because the whole UI is one Vue app.
 
-## 2. Component Model and Life Cycle
+# 2. Component Model and Life Cycle
 
 *Introduced in step 7.*
 
@@ -822,16 +827,19 @@ const emit = defineEmits<{ react: [reaction: Reaction]; toggleFavourite: [] }>()
 </template>
 
 <!-- MusicItemDetailView.vue (parent) -->
+<!-- No entry yet: the buttons show "nothing selected". Reacting adds the item first. -->
 <ReactionControls
-  :reaction="entry.reaction"
-  :favourite="entry.favourite"
+  :reaction="entry?.reaction ?? 'NONE'"
+  :favourite="entry?.favourite ?? false"
   @react="collection.setReaction(item.id, $event)"
   @toggle-favourite="collection.toggleFavourite(item.id)"
 />
 ```
 
 `ReactionControls` knows nothing about stores or the backend. It is used on two pages
-and tested with nothing but props and emitted events.
+(detail, my collection) and tested with nothing but props and emitted events.
+When reacting was changed to add the item to the collection automatically (POST, then
+PATCH, see step 7), only the collection store changed; the component stayed the same.
 
 **`v-model` on components** is syntactic sugar for a prop plus an event. Since Vue 3.4,
 `defineModel()` declares both at once:
