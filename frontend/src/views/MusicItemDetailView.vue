@@ -126,12 +126,12 @@ async function remove() {
             </div>
             <div class="card-footer bg-transparent d-flex flex-wrap align-items-center gap-2">
               <CollectionButton :music-item-id="item.id" />
-              <!-- Only in the collection can an item be liked/disliked/favourited.
+              <!-- Reacting to an item that is not in the collection adds it first.
                    The component emits events; the store does the work. -->
               <ReactionControls
-                v-if="entry"
-                :reaction="entry.reaction"
-                :favourite="entry.favourite"
+                :reaction="entry?.reaction ?? 'NONE'"
+                :favourite="entry?.favourite ?? false"
+                :disabled="!collection.loaded"
                 @react="collection.setReaction(item.id, $event)"
                 @toggle-favourite="collection.toggleFavourite(item.id)"
               />

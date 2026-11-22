@@ -117,6 +117,22 @@ describe('collection store', () => {
     expect(service.update).toHaveBeenLastCalledWith(2, 6, { favourite: true, reaction: 'NONE' })
   })
 
+  it('adds an item before reacting to it, and keeps it when the reaction is reset', async () => {
+    const collection = useCollectionStore()
+    await collection.load()
+    service.add.mockResolvedValue(entry(1))
+    service.update.mockImplementation(async (_user, id, changes) => entry(id, changes))
+
+    await collection.setReaction(1, 'LIKE')
+    expect(service.add).toHaveBeenCalledWith(2, 1) // POST first
+    expect(service.update).toHaveBeenLastCalledWith(2, 1, { reaction: 'LIKE' }) // then PATCH
+    expect(collection.entryFor(1)?.reaction).toBe('LIKE')
+
+    await collection.setReaction(1, 'NONE')
+    expect(collection.has(1)).toBe(true) // still in the collection
+    expect(service.add).toHaveBeenCalledTimes(1) // no second POST
+  })
+  
   it('reloads when another user is selected', async () => {
     const collection = useCollectionStore()
     await collection.load()

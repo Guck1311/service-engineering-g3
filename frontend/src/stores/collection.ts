@@ -99,8 +99,11 @@ export const useCollectionStore = defineStore('collection', () => {
   /**
    * The backend rejects "disliked + favourite" (400). Instead of letting that happen,
    * the store keeps the combination valid: disliking removes the favourite flag.
+   * Reacting to an item that is not in the collection adds it first (POST, then PATCH).
+   * Resetting the reaction keeps the item: removing stays an explicit action.
    */
-  function setReaction(musicItemId: number, reaction: Reaction) {
+  async function setReaction(musicItemId: number, reaction: Reaction) {
+    if (!has(musicItemId)) await add(musicItemId)
     return update(
       musicItemId,
       reaction === 'DISLIKE' ? { reaction, favourite: false } : { reaction },
@@ -108,7 +111,8 @@ export const useCollectionStore = defineStore('collection', () => {
   }
 
   /** ...and marking a disliked item as favourite resets the dislike. */
-  function toggleFavourite(musicItemId: number) {
+  async function toggleFavourite(musicItemId: number) {
+    if (!has(musicItemId)) await add(musicItemId)
     const entry = entryFor(musicItemId)
     if (!entry) throw new ApiError('This item is not in your collection.', 'http', 404)
     const favourite = !entry.favourite
