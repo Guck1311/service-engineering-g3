@@ -56,6 +56,10 @@ jobs:
       # starts the SPA there, and Vue Router shows the right page for the URL.
       - run: cp dist/index.html dist/404.html
 
+      # The component catalogue, published next to the app under /<repository>/storybook/.
+      # It runs on its own fake backend, so it works even when the real one sleeps.
+      - run: npm run build-storybook -- -o dist/storybook
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist

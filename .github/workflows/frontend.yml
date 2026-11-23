@@ -27,4 +27,5 @@ jobs:
       - run: npm run ci:lint
       - run: npm run ci:format
       - run: npm run test:unit -- --run
-      - run: npm run build # includes the vue-tsc type check
+      - run: npm run build # includes the vue-tsc type check (also of the stories)
+      - run: npm run build-storybook # fails if a story or the Storybook config is broken

@@ -1,0 +1,37 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="Error handling/Overview" />
+
+# Error handling: which error goes where
+
+Errors are handled in layers, from specific to general. Each layer catches what it
+can handle well and lets the rest continue to the next one.
+
+| #   | Layer                                       | Catches                                                     | The user sees                                                         | Story                                                                                                                                |
+| --- | ------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `api/http.ts` response interceptor          | every failed request                                        | (converts it into an `ApiError` with a readable message and a `kind`) | [ErrorAlert](?path=/story/errors-erroralert--not-found)                                                                              |
+| 2   | Page or section (`useAsync` + `ErrorAlert`) | its own data could not be loaded                            | inline alert with **Retry**                                           | [RatingPanel](?path=/story/music-ratingpanel--load-fails-then-retry), [Catalogue](?path=/story/pages-full-app--catalogue-load-fails) |
+| 2   | Detail page                                 | 404 for the item                                            | `NotFoundState`                                                       | [Pages](?path=/story/pages-full-app--music-item-not-found)                                                                           |
+| 3   | `ErrorBoundary` (`onErrorCaptured`)         | a bug while rendering a page                                | fallback with **Try again**                                           | [ErrorBoundary](?path=/story/errors-errorboundary--crash-then-try-again)                                                             |
+| 4   | `app.config.errorHandler`                   | errors in event handlers, hooks, watchers                   | toast                                                                 | [Error sources](?path=/story/error-handling-error-sources--try-each-source)                                                          |
+| 5   | `router.onError`                            | a lazy page cannot be downloaded (old chunk after a deploy) | warning toast "please reload"                                         | [Error sources](?path=/story/error-handling-error-sources--try-each-source)                                                          |
+| 6   | `unhandledrejection` listener               | promises nobody awaited                                     | toast                                                                 | [Error sources](?path=/story/error-handling-error-sources--try-each-source)                                                          |
+| 7   | `ConnectionBanner`                          | offline, or the backend is down at startup                  | banner under the navbar, **Retry**                                    | [ConnectionBanner](?path=/story/errors-connectionbanner--offline)                                                                    |
+
+## The kinds of `ApiError`
+
+| `kind`     | When                                           | Message                                                                    |
+| ---------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `http`     | the backend answered with 4xx/5xx              | the backend's message; for 400 "Please check your input." plus the details |
+| `network`  | no answer at all (backend down, offline, CORS) | "The server cannot be reached. Is the backend running?"                    |
+| `timeout`  | no answer within 60 s                          | "The server took too long to respond. Please try again."                   |
+| `canceled` | the request was aborted on purpose             | not shown to the user                                                      |
+
+## Rules
+
+- **Components have no try/catch for actions.** A failing click handler reaches the global
+  handler, which shows a toast; `finally` blocks still reset spinners.
+- **Expected failures vs. bugs.** An `ApiError` is expected: its message is shown. Anything
+  else is a bug: the user sees a neutral message, the details go to the console.
+- **Optimistic updates roll back.** The collection store shows a change at once and
+  restores the old state if the backend rejects it.

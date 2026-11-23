@@ -15,6 +15,7 @@
     "correctness": "error"
   },
   "ignorePatterns": [
-    "src/api/schema.d.ts"
+    "src/api/schema.d.ts",
+    "storybook-static/**"
   ]
 }
